@@ -275,7 +275,7 @@ const Projects: React.FC = () => {
           }}
           onSave={editingProject ? handleEditProject : handleCreateProject}
           editProject={editingProject ? {
-            id: parseInt(editingProject.id.replace(/-/g, '').substring(0, 8), 16),
+            id: editingProject.id,
             title: editingProject.title,
             startDate: editingProject.start_date,
             description: editingProject.description,

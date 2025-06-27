@@ -313,7 +313,7 @@ const Blog: React.FC = () => {
           }}
           onSave={editingPost ? handleEditPost : handleCreatePost}
           editPost={editingPost ? {
-            id: parseInt(editingPost.id.replace(/-/g, '').substring(0, 8), 16),
+            id: editingPost.id,
             title: editingPost.title,
             content: editingPost.content,
             timestamp: editingPost.created_at

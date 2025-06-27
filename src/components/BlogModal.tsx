@@ -8,7 +8,7 @@ interface BlogModalProps {
 }
 
 export interface BlogPostData {
-  id?: number;
+  id?: string;
   title: string;
   content: string;
   timestamp: string;

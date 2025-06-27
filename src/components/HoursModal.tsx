@@ -9,7 +9,7 @@ interface HoursModalProps {
 }
 
 export interface HoursEntryData {
-  id?: number;
+  id?: string;
   date: string;
   hours: number;
   description: string;
