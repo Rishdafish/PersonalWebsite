@@ -53,10 +53,10 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
-// Helper function to handle promises with timeout
+// Helper function to handle promises with timeout - increased default timeout
 const withTimeout = async <T>(
   promise: Promise<T>,
-  timeoutMs: number = 15000,
+  timeoutMs: number = 30000,
   errorMessage: string = 'Request timed out'
 ): Promise<T> => {
   const timeoutPromise = new Promise<never>((_, reject) => {
@@ -75,7 +75,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // Check if Supabase is properly configured
   const isSupabaseConfigured = !!(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY);
 
-  // Test Supabase connection with improved method
+  // Test Supabase connection with improved method and increased timeout
   const testSupabaseConnection = async (): Promise<boolean> => {
     if (!isSupabaseConfigured) {
       setConnectionError('Supabase environment variables are not configured');
@@ -83,10 +83,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
 
     try {
-      // Use a simpler health check that doesn't require specific tables
+      // Use a simpler health check that doesn't require specific tables with increased timeout
       const { error } = await withTimeout(
         supabase.auth.getSession(),
-        20000,
+        30000,
         'Connection timeout - please check your internet connection'
       );
 
@@ -119,7 +119,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   useEffect(() => {
     let mounted = true;
 
-    // Get initial session with improved error handling
+    // Get initial session with improved error handling and increased timeout
     const getInitialSession = async () => {
       try {
         if (!isSupabaseConfigured) {
@@ -131,7 +131,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           return;
         }
 
-        // Test connection first with the improved method
+        // Test connection first with the improved method and increased timeout
         const connectionOk = await testSupabaseConnection();
         if (!connectionOk) {
           if (mounted) {
@@ -140,10 +140,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           return;
         }
 
-        // Get session with timeout
+        // Get session with increased timeout
         const { data: { session }, error } = await withTimeout(
           supabase.auth.getSession(),
-          15000,
+          30000,
           'Session check timeout'
         );
         
@@ -238,7 +238,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           .select('*')
           .eq('id', authUser.id)
           .maybeSingle(),
-        20000,
+        30000,
         'Profile loading timeout'
       );
 
@@ -309,7 +309,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           .eq('token', token)
           .eq('is_active', true)
           .maybeSingle(),
-        10000,
+        30000,
         'Token validation timeout'
       );
 
@@ -337,7 +337,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           email,
           password,
         }),
-        15000,
+        30000,
         'Login request timeout - please check your connection'
       );
 
@@ -408,7 +408,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       const { data, error } = await withTimeout(
         supabase.auth.signUp(signUpData),
-        15000,
+        30000,
         'Registration request timeout - please check your connection'
       );
 
@@ -449,7 +449,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (isSupabaseConfigured) {
         await withTimeout(
           supabase.auth.signOut(),
-          10000,
+          30000,
           'Logout timeout'
         );
       }
