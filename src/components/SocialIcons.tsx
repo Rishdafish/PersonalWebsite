@@ -4,11 +4,12 @@ import { useLocation } from 'react-router-dom';
 
 const SocialIcons: React.FC = () => {
   const location = useLocation();
+  const isProjectsPage = location.pathname === '/projects';
   const isBlogPage = location.pathname === '/blog';
   const isHoursPage = location.pathname === '/hours';
   
-  // Don't show social icons on blog or hours pages
-  if (isBlogPage || isHoursPage) {
+  // Don't show social icons on projects, blog, or hours pages
+  if (isProjectsPage || isBlogPage || isHoursPage) {
     return null;
   }
 

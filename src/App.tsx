@@ -25,17 +25,17 @@ function App() {
               <Routes>
                 <Route path="/" element={<Home />} />
                 <Route path="/blog" element={
-                  <ProtectedRoute>
+                  <ProtectedRoute requireRole="authenticated" feature="the blog">
                     <Blog />
                   </ProtectedRoute>
                 } />
                 <Route path="/hours" element={
-                  <ProtectedRoute>
+                  <ProtectedRoute requireRole="specialized" feature="the hours tracking system">
                     <Hours />
                   </ProtectedRoute>
                 } />
                 <Route path="/projects" element={
-                  <ProtectedRoute>
+                  <ProtectedRoute requireRole="authenticated" feature="the projects page">
                     <Projects />
                   </ProtectedRoute>
                 } />

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { Eye, EyeOff } from 'lucide-react';
 
 interface AuthModalProps {
   onClose: () => void;
@@ -11,10 +12,24 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [token, setToken] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [tokenValidated, setTokenValidated] = useState<boolean | null>(null);
   
-  const { login, register } = useAuth();
+  const { login, register, validateToken } = useAuth();
+
+  const handleTokenValidation = async (tokenValue: string) => {
+    if (!tokenValue.trim()) {
+      setTokenValidated(null);
+      return;
+    }
+
+    const isValid = await validateToken(tokenValue);
+    setTokenValidated(isValid);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,6 +49,13 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
           setLoading(false);
           return;
         }
+        
+        // Validate token if provided
+        if (token && !tokenValidated) {
+          setError('Please enter a valid token or leave empty for regular access');
+          setLoading(false);
+          return;
+        }
       }
 
       let success = false;
@@ -44,17 +66,17 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
           setError('Invalid email or password');
         }
       } else {
-        success = await register(email, password);
+        success = await register(email, password, token || undefined);
         if (!success) {
-          setError('Registration failed. User may already exist.');
+          setError('Registration failed. Please check your details and try again.');
         }
       }
 
       if (success) {
         onAuthSuccess();
       }
-    } catch (err) {
-      setError('An error occurred. Please try again.');
+    } catch (err: any) {
+      setError(err.message || 'An error occurred. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -66,6 +88,22 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
     }
   };
 
+  const resetForm = () => {
+    setEmail('');
+    setPassword('');
+    setConfirmPassword('');
+    setToken('');
+    setError('');
+    setTokenValidated(null);
+    setShowPassword(false);
+    setShowConfirmPassword(false);
+  };
+
+  const toggleMode = () => {
+    setIsLogin(!isLogin);
+    resetForm();
+  };
+
   return (
     <div className="auth-modal" onClick={handleOverlayClick}>
       <div className="auth-modal-content">
@@ -73,7 +111,18 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
           ×
         </button>
         
-        <h2>{isLogin ? 'Login' : 'Register'}</h2>
+        <h2>{isLogin ? 'Login' : 'Create Account'}</h2>
+        
+        {!isLogin && (
+          <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <h3 className="font-semibold text-blue-900 mb-2">Account Types:</h3>
+            <ul className="text-sm text-blue-800 space-y-1">
+              <li><strong>Regular:</strong> Basic access to public content</li>
+              <li><strong>Specialized:</strong> Full access with valid token</li>
+              <li><strong>Admin:</strong> Full system control (automatic for admin emails)</li>
+            </ul>
+          </div>
+        )}
         
         <form onSubmit={handleSubmit} className="auth-form">
           <input
@@ -85,24 +134,85 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
             required
           />
           
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="auth-input"
-            required
-          />
-          
-          {!isLogin && (
+          <div className="relative">
             <input
-              type="password"
-              placeholder="Confirm Password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              className="auth-input"
+              type={showPassword ? "text" : "password"}
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="auth-input pr-10"
               required
             />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+            >
+              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
+          
+          {!isLogin && (
+            <>
+              <div className="relative">
+                <input
+                  type={showConfirmPassword ? "text" : "password"}
+                  placeholder="Confirm Password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="auth-input pr-10"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                >
+                  {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+              
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Specialized Access Token (Optional)"
+                  value={token}
+                  onChange={(e) => {
+                    setToken(e.target.value);
+                    handleTokenValidation(e.target.value);
+                  }}
+                  className={`auth-input ${
+                    token ? (tokenValidated === true ? 'border-green-500' : tokenValidated === false ? 'border-red-500' : '') : ''
+                  }`}
+                />
+                {token && (
+                  <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                    {tokenValidated === true && (
+                      <div className="w-4 h-4 bg-green-500 rounded-full flex items-center justify-center">
+                        <span className="text-white text-xs">✓</span>
+                      </div>
+                    )}
+                    {tokenValidated === false && (
+                      <div className="w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
+                        <span className="text-white text-xs">✗</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              
+              {token && tokenValidated === true && (
+                <div className="text-sm text-green-600 bg-green-50 p-2 rounded">
+                  ✓ Valid token - You'll have specialized access
+                </div>
+              )}
+              
+              {token && tokenValidated === false && (
+                <div className="text-sm text-red-600 bg-red-50 p-2 rounded">
+                  ✗ Invalid token - You'll have regular access
+                </div>
+              )}
+            </>
           )}
           
           {error && <div className="error-message">{error}</div>}
@@ -112,20 +222,14 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
             className="auth-button interactive"
             disabled={loading}
           >
-            {loading ? 'Processing...' : (isLogin ? 'Login' : 'Register')}
+            {loading ? 'Processing...' : (isLogin ? 'Login' : 'Create Account')}
           </button>
         </form>
         
         <div className="auth-toggle">
           <button 
             type="button"
-            onClick={() => {
-              setIsLogin(!isLogin);
-              setError('');
-              setEmail('');
-              setPassword('');
-              setConfirmPassword('');
-            }}
+            onClick={toggleMode}
             className="interactive"
           >
             {isLogin ? 'Need an account? Register' : 'Have an account? Login'}
