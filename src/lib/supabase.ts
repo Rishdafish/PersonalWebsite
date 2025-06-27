@@ -6,38 +6,21 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 console.log('🔧 Supabase Configuration Check:');
 console.log('URL:', supabaseUrl ? '✅ Present' : '❌ Missing');
 console.log('Anon Key:', supabaseAnonKey ? '✅ Present' : '❌ Missing');
+console.log('Full URL:', supabaseUrl);
+console.log('Key length:', supabaseAnonKey?.length || 0);
 
 // Validate URL format
-let validUrl = supabaseUrl;
-let validKey = supabaseAnonKey;
-let isRealConnection = false;
-
-if (supabaseUrl && !supabaseUrl.startsWith('http')) {
-  console.error('❌ Invalid Supabase URL format. URL must start with http:// or https://');
-  validUrl = null;
+if (!supabaseUrl || !supabaseUrl.startsWith('https://')) {
+  console.error('❌ Invalid or missing Supabase URL');
+  throw new Error('Missing or invalid VITE_SUPABASE_URL environment variable');
 }
 
-if (!validUrl || !validKey) {
-  console.error('❌ Missing or invalid Supabase environment variables');
-  console.error('Please check your .env file and ensure it contains:');
-  console.error('VITE_SUPABASE_URL=https://your-project-id.supabase.co');
-  console.error('VITE_SUPABASE_ANON_KEY=your_anon_key');
-  
-  // Use mock values for development
-  if (import.meta.env.DEV) {
-    console.warn('⚠️ Running in development mode with mock Supabase connection');
-    validUrl = 'https://localhost:54321';
-    validKey = 'mock-anon-key';
-    isRealConnection = false;
-  } else {
-    throw new Error('Missing or invalid Supabase environment variables');
-  }
-} else {
-  // Check if we have real Supabase credentials
-  isRealConnection = validUrl.includes('.supabase.co') && validKey.length > 20;
+if (!supabaseAnonKey || supabaseAnonKey.length < 20) {
+  console.error('❌ Invalid or missing Supabase anon key');
+  throw new Error('Missing or invalid VITE_SUPABASE_ANON_KEY environment variable');
 }
 
-export const supabase = createClient(validUrl, validKey, {
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
@@ -46,25 +29,20 @@ export const supabase = createClient(validUrl, validKey, {
   }
 });
 
-console.log('✅ Supabase client initialized');
+console.log('✅ Supabase client initialized with URL:', supabaseUrl);
 
-// Test connection only if we have real credentials and valid URL
-if (isRealConnection) {
-  // Use a more reliable connection test
-  supabase.from('user_tokens').select('count').limit(1)
-    .then(({ data, error }) => {
-      if (error && error.code !== 'PGRST116') { // PGRST116 is "no rows returned" which is fine
-        console.error('❌ Supabase connection test failed:', error);
-      } else {
-        console.log('✅ Supabase connection test successful');
-      }
-    })
-    .catch((error) => {
-      console.error('❌ Supabase connection test error:', error);
-    });
-} else {
-  console.log('⚠️ Skipping connection test - using mock or invalid credentials');
-}
+// Test connection
+supabase.from('user_tokens').select('count').limit(1)
+  .then(({ data, error }) => {
+    if (error && error.code !== 'PGRST116') { // PGRST116 is "no rows returned" which is fine
+      console.error('❌ Supabase connection test failed:', error);
+    } else {
+      console.log('✅ Supabase connection test successful');
+    }
+  })
+  .catch((error) => {
+    console.error('❌ Supabase connection test error:', error);
+  });
 
 // Database types
 export interface UserStatistics {
