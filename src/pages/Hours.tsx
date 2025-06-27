@@ -16,7 +16,7 @@ const Hours: React.FC = () => {
   const [yearlyData, setYearlyData] = useState<WorkEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
-  const entriesPerPage = 10;
+  const entriesPerPage = 5; // Changed to 5 entries per page
 
   // Modal states
   const [showWorkModal, setShowWorkModal] = useState(false);
@@ -144,6 +144,8 @@ const Hours: React.FC = () => {
         setWorkEntries([data, ...workEntries]);
         await updateStatistics();
         await updateSubjectProgress(entryData.subject_id, entryData.hours);
+        // Reset to first page when new entry is added
+        setCurrentPage(1);
         // Reload yearly data
         loadData();
       }
@@ -202,7 +204,15 @@ const Hours: React.FC = () => {
 
       if (error) throw error;
 
-      setWorkEntries(workEntries.filter(entry => entry.id !== entryId));
+      const updatedEntries = workEntries.filter(entry => entry.id !== entryId);
+      setWorkEntries(updatedEntries);
+      
+      // Adjust current page if necessary
+      const totalPages = Math.ceil(updatedEntries.length / entriesPerPage);
+      if (currentPage > totalPages && totalPages > 0) {
+        setCurrentPage(totalPages);
+      }
+      
       await updateStatistics();
       // Reload yearly data
       loadData();
@@ -462,6 +472,19 @@ const Hours: React.FC = () => {
   const startIndex = (currentPage - 1) * entriesPerPage;
   const currentEntries = workEntries.slice(startIndex, startIndex + entriesPerPage);
 
+  // Pagination handlers
+  const handlePreviousPage = () => {
+    setCurrentPage(Math.max(1, currentPage - 1));
+  };
+
+  const handleNextPage = () => {
+    setCurrentPage(Math.min(totalPages, currentPage + 1));
+  };
+
+  const handlePageClick = (page: number) => {
+    setCurrentPage(page);
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
@@ -704,10 +727,17 @@ const Hours: React.FC = () => {
           </div>
         </div>
 
-        {/* Recent Entries */}
+        {/* Recent Entries with Pagination */}
         <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
           <div className="flex justify-between items-center mb-6">
-            <h3 className="text-xl font-semibold text-gray-900">Recent Entries</h3>
+            <div>
+              <h3 className="text-xl font-semibold text-gray-900">Recent Entries</h3>
+              {workEntries.length > 0 && (
+                <p className="text-sm text-gray-500 mt-1">
+                  Showing {startIndex + 1}-{Math.min(startIndex + entriesPerPage, workEntries.length)} of {workEntries.length} entries
+                </p>
+              )}
+            </div>
             <button
               onClick={() => {
                 setEditingEntry(null);
@@ -719,6 +749,7 @@ const Hours: React.FC = () => {
               <span>Add Entry</span>
             </button>
           </div>
+          
           <div className="space-y-4">
             {currentEntries.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
@@ -732,8 +763,15 @@ const Hours: React.FC = () => {
                 </button>
               </div>
             ) : (
-              currentEntries.map((entry) => (
-                <div key={entry.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
+              currentEntries.map((entry, index) => (
+                <div 
+                  key={entry.id} 
+                  className="flex items-center justify-between p-4 bg-gray-50 rounded-xl transition-all duration-300 hover:bg-gray-100"
+                  style={{
+                    animationDelay: `${index * 50}ms`,
+                    animation: 'fadeInUp 0.3s ease-out forwards'
+                  }}
+                >
                   <div className="flex items-center space-x-4">
                     <div className="p-2 bg-blue-100 rounded-lg">
                       <Calendar className="w-4 h-4 text-blue-600" />
@@ -757,13 +795,15 @@ const Hours: React.FC = () => {
                             setEditingEntry(entry);
                             setShowWorkModal(true);
                           }}
-                          className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+                          className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                          title="Edit entry"
                         >
                           <Edit3 size={14} />
                         </button>
                         <button
                           onClick={() => handleDeleteWorkEntry(entry.id)}
                           className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                          title="Delete entry"
                         >
                           <Trash2 size={14} />
                         </button>
@@ -775,38 +815,55 @@ const Hours: React.FC = () => {
             )}
           </div>
 
-          {/* Pagination */}
+          {/* Pagination Controls */}
           {totalPages > 1 && (
-            <div className="flex justify-center items-center space-x-4 mt-6">
+            <div className="flex justify-center items-center space-x-4 mt-8 pt-6 border-t border-gray-200">
               <button
-                onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                onClick={handlePreviousPage}
                 disabled={currentPage === 1}
-                className="flex items-center space-x-2 px-3 py-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 ${
+                  currentPage === 1
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-800'
+                }`}
               >
                 <ChevronLeft size={16} />
                 <span>Previous</span>
               </button>
               
-              <div className="flex space-x-2">
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                  <button
-                    key={page}
-                    onClick={() => setCurrentPage(page)}
-                    className={`px-3 py-2 rounded-lg transition-colors ${
-                      currentPage === page
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
-                  >
-                    {page}
-                  </button>
-                ))}
+              <div className="flex items-center space-x-2">
+                <span className="text-sm text-gray-600 px-3 py-2">
+                  Page {currentPage} of {totalPages}
+                </span>
+                
+                {/* Page number buttons for smaller page counts */}
+                {totalPages <= 7 && (
+                  <div className="flex space-x-1">
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                      <button
+                        key={page}
+                        onClick={() => handlePageClick(page)}
+                        className={`px-3 py-2 rounded-lg transition-all duration-200 ${
+                          currentPage === page
+                            ? 'bg-blue-600 text-white shadow-md'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
+                      >
+                        {page}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
               
               <button
-                onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                onClick={handleNextPage}
                 disabled={currentPage === totalPages}
-                className="flex items-center space-x-2 px-3 py-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 ${
+                  currentPage === totalPages
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-800'
+                }`}
               >
                 <span>Next</span>
                 <ChevronRight size={16} />
