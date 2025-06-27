@@ -74,10 +74,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           return;
         }
 
-        // Add timeout to prevent hanging
+        // Increased timeout to 30 seconds to prevent timeout errors
         const sessionPromise = supabase.auth.getSession();
         const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('Session check timeout')), 10000);
+          setTimeout(() => reject(new Error('Session check timeout')), 30000);
         });
 
         const { data: { session }, error } = await Promise.race([sessionPromise, timeoutPromise]) as any;
