@@ -35,8 +35,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Admin email for admin privileges
-  const ADMIN_EMAIL = 'rishabh.biry@gmail.com';
+  // Admin emails for admin privileges
+  const ADMIN_EMAILS = [
+    'rishabh.biry@gmail.com',
+    'biryrishabh01@gmail.com',
+    'biryrishabh@gmail.com'
+  ];
+
+  const isAdminEmail = (email: string) => {
+    return ADMIN_EMAILS.includes(email);
+  };
 
   useEffect(() => {
     // Get initial session
@@ -47,7 +55,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           setUser({
             id: session.user.id,
             email: session.user.email || '',
-            isAdmin: session.user.email === ADMIN_EMAIL
+            isAdmin: isAdminEmail(session.user.email || '')
           });
         }
       } catch (error) {
@@ -66,7 +74,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           setUser({
             id: session.user.id,
             email: session.user.email || '',
-            isAdmin: session.user.email === ADMIN_EMAIL
+            isAdmin: isAdminEmail(session.user.email || '')
           });
         } else {
           setUser(null);
@@ -94,7 +102,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setUser({
           id: data.user.id,
           email: data.user.email || '',
-          isAdmin: data.user.email === ADMIN_EMAIL
+          isAdmin: isAdminEmail(data.user.email || '')
         });
         return true;
       }
