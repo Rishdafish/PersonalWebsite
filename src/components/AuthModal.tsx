@@ -148,7 +148,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
               placeholder="Password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="auth-input pr-10"
+              className="auth-input"
               required
               disabled={loading}
             />
@@ -170,7 +170,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
                   placeholder="Confirm Password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="auth-input pr-10"
+                  className="auth-input"
                   required
                   disabled={loading}
                 />

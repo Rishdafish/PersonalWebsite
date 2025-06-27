@@ -399,6 +399,8 @@ a, button, .interactive {
   font-family: 'Inter', sans-serif;
   font-size: 0.95rem;
   transition: all 0.2s ease;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .auth-input:focus {
@@ -1026,6 +1028,8 @@ a, button, .interactive {
   font-family: 'Inter', sans-serif;
   font-size: 0.95rem;
   transition: all 0.2s ease;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .form-input:focus, .form-textarea:focus, .form-select:focus {

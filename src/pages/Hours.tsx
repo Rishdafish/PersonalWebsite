@@ -13,10 +13,9 @@ const Hours: React.FC = () => {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [achievements, setAchievements] = useState<Achievement[]>([]);
   const [workEntries, setWorkEntries] = useState<WorkEntry[]>([]);
-  const [yearlyData, setYearlyData] = useState<WorkEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
-  const entriesPerPage = 5; // Changed to 5 entries per page
+  const entriesPerPage = 5;
 
   // Modal states
   const [showWorkModal, setShowWorkModal] = useState(false);
@@ -88,26 +87,6 @@ const Hours: React.FC = () => {
         setWorkEntries(entriesData);
       }
 
-      // Load yearly data for 2025
-      const { data: yearlyEntriesData } = await supabase
-        .from('work_entries')
-        .select(`
-          *,
-          subjects (
-            id,
-            name,
-            icon
-          )
-        `)
-        .eq('user_id', user.id)
-        .gte('entry_date', '2025-01-01')
-        .lte('entry_date', '2025-12-31')
-        .order('entry_date', { ascending: true });
-
-      if (yearlyEntriesData) {
-        setYearlyData(yearlyEntriesData);
-      }
-
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -144,10 +123,7 @@ const Hours: React.FC = () => {
         setWorkEntries([data, ...workEntries]);
         await updateStatistics();
         await updateSubjectProgress(entryData.subject_id, entryData.hours);
-        // Reset to first page when new entry is added
         setCurrentPage(1);
-        // Reload yearly data
-        loadData();
       }
     } catch (error) {
       console.error('Error creating work entry:', error);
@@ -185,8 +161,6 @@ const Hours: React.FC = () => {
         ));
         await updateStatistics();
         setEditingEntry(null);
-        // Reload yearly data
-        loadData();
       }
     } catch (error) {
       console.error('Error updating work entry:', error);
@@ -214,8 +188,6 @@ const Hours: React.FC = () => {
       }
       
       await updateStatistics();
-      // Reload yearly data
-      loadData();
     } catch (error) {
       console.error('Error deleting work entry:', error);
     }
@@ -438,15 +410,15 @@ const Hours: React.FC = () => {
     return last7Days;
   };
 
-  // Generate yearly chart data
-  const generateYearlyChartData = () => {
+  // Generate monthly chart data for 2025
+  const generateMonthlyChartData = () => {
     const months = [
       'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
     ];
     
     const monthlyData = months.map((month, index) => {
-      const monthEntries = yearlyData.filter(entry => {
+      const monthEntries = workEntries.filter(entry => {
         const entryDate = new Date(entry.entry_date);
         return entryDate.getMonth() === index && entryDate.getFullYear() === 2025;
       });
@@ -463,9 +435,9 @@ const Hours: React.FC = () => {
   };
 
   const chartData = generateChartData();
-  const yearlyChartData = generateYearlyChartData();
+  const monthlyChartData = generateMonthlyChartData();
   const maxChartHours = Math.max(...chartData.map(d => d.hours), 1);
-  const maxYearlyHours = Math.max(...yearlyChartData.map(d => d.hours), 1);
+  const maxMonthlyHours = Math.max(...monthlyChartData.map(d => d.hours), 1);
 
   // Pagination for recent entries
   const totalPages = Math.ceil(workEntries.length / entriesPerPage);
@@ -560,7 +532,7 @@ const Hours: React.FC = () => {
           </div>
         </div>
 
-        {/* Daily Hours Line Graph */}
+        {/* Daily Work Hours Line Graph */}
         <DailyHoursLineGraph 
           workEntries={workEntries} 
           className="mb-12"
@@ -568,7 +540,7 @@ const Hours: React.FC = () => {
 
         {/* Charts and Progress Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
-          {/* Daily Hours Chart */}
+          {/* Daily Hours Chart (Last 7 Days) */}
           <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
             <h3 className="text-xl font-semibold text-gray-900 mb-6">Daily Hours (Last 7 Days)</h3>
             <div className="space-y-4">
@@ -655,17 +627,17 @@ const Hours: React.FC = () => {
           </div>
         </div>
 
-        {/* Yearly Hours Chart */}
+        {/* Monthly Hours Chart */}
         <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 mb-12">
-          <h3 className="text-xl font-semibold text-gray-900 mb-6">Yearly Hours (2025)</h3>
+          <h3 className="text-xl font-semibold text-gray-900 mb-6">Monthly Hours (2025)</h3>
           <div className="space-y-4">
-            {yearlyChartData.map((month, index) => (
+            {monthlyChartData.map((month, index) => (
               <div key={index} className="flex items-center space-x-4">
                 <div className="w-12 text-sm font-medium text-gray-600">{month.month}</div>
                 <div className="flex-1 bg-gray-200 rounded-full h-6 relative">
                   <div 
                     className="bg-gradient-to-r from-blue-500 to-purple-500 h-6 rounded-full transition-all duration-500"
-                    style={{ width: `${maxYearlyHours > 0 ? (month.hours / maxYearlyHours) * 100 : 0}%` }}
+                    style={{ width: `${maxMonthlyHours > 0 ? (month.hours / maxMonthlyHours) * 100 : 0}%` }}
                   ></div>
                 </div>
                 <div className="w-12 text-sm font-semibold text-gray-900">{month.hours}h</div>
