@@ -261,9 +261,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         .select('*')
         .eq('token', token)
         .eq('is_active', true)
-        .single();
+        .limit(1);
 
-      const isValid = !error && !!data;
+      if (error) {
+        console.error('❌ Error validating token:', error);
+        return false;
+      }
+
+      const isValid = data && data.length > 0;
       console.log('🎫 Token validation result:', isValid);
       return isValid;
     } catch (error) {
