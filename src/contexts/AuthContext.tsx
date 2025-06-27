@@ -59,16 +59,27 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   useEffect(() => {
     let mounted = true;
 
-    // Get initial session with timeout
+    // Get initial session with improved error handling
     const getInitialSession = async () => {
       try {
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Session check timeout')), 10000)
-        );
+        // Check if Supabase is properly configured
+        if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
+          console.warn('Supabase environment variables not configured');
+          if (mounted) {
+            setLoading(false);
+          }
+          return;
+        }
 
-        const sessionPromise = supabase.auth.getSession();
+        const { data: { session }, error } = await supabase.auth.getSession();
         
-        const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]) as any;
+        if (error) {
+          console.error('Error getting session:', error);
+          if (mounted) {
+            setLoading(false);
+          }
+          return;
+        }
         
         if (mounted) {
           if (session?.user) {
