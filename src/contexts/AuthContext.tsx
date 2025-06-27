@@ -70,7 +70,6 @@ const terminalLog = (message: string, data?: any) => {
 
 const terminalError = (message: string, error?: any) => {
   console.log('SIGN-UP FAILED 🚨');
-  console.log('code    :', error.code);
   console.log('status  :', error.status);
   console.log('message :', error.message);
   console.log('details :', error.details);
