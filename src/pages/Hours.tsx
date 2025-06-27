@@ -38,7 +38,7 @@ const Hours: React.FC = () => {
         .from('user_statistics')
         .select('*')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
 
       if (statsData) {
         setStatistics(statsData);
@@ -323,7 +323,7 @@ const Hours: React.FC = () => {
           .from('user_statistics')
           .select('*')
           .eq('user_id', user.id)
-          .single();
+          .maybeSingle();
 
         if (statsData) {
           setStatistics(statsData);
