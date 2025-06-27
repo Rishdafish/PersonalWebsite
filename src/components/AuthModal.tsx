@@ -12,7 +12,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [token, setToken] = useState('');
+  const [token, setToken] = useState(''); // Always start empty
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState('');
@@ -27,10 +27,15 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
       return;
     }
 
-    console.log('🎫 Validating token in modal:', tokenValue.substring(0, 5) + '...');
-    const isValid = await validateToken(tokenValue);
-    setTokenValidated(isValid);
-    console.log('🎫 Token validation result in modal:', isValid);
+    console.log('🎫 Validating token:', tokenValue.substring(0, 5) + '...');
+    try {
+      const isValid = await validateToken(tokenValue);
+      setTokenValidated(isValid);
+      console.log('🎫 Token validation result:', isValid);
+    } catch (error) {
+      console.error('❌ Token validation error:', error);
+      setTokenValidated(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -38,7 +43,12 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
     setError('');
     setLoading(true);
 
-    console.log('📝 Form submitted:', { isLogin, email, hasToken: !!token });
+    console.log('📝 Form submitted:', { 
+      isLogin, 
+      email, 
+      hasToken: !!token,
+      tokenLength: token.length 
+    });
 
     try {
       if (!isLogin) {
@@ -53,7 +63,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
         }
         
         // Validate token if provided
-        if (token && !tokenValidated) {
+        if (token && tokenValidated !== true) {
           setError('Please enter a valid token or leave empty for regular access');
           return;
         }
@@ -62,13 +72,13 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
       let success = false;
       
       if (isLogin) {
-        console.log('🔐 Attempting login...');
+        console.log('🔐 Attempting login for:', email);
         success = await login(email, password);
         if (!success) {
           setError('Invalid email or password. Please check your credentials and try again.');
         }
       } else {
-        console.log('📝 Attempting registration...');
+        console.log('📝 Attempting registration for:', email, 'with token:', !!token);
         success = await register(email, password, token || undefined);
         if (!success) {
           setError('Registration failed. Please check your details and try again.');
@@ -79,9 +89,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
 
       if (success) {
         console.log('🎉 Auth successful, calling onAuthSuccess');
-        // Reset form state
         resetForm();
-        // Close modal immediately on success
         onAuthSuccess();
       }
     } catch (err: any) {
@@ -89,7 +97,6 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
       setError(err.message || 'An error occurred. Please try again.');
     } finally {
       setLoading(false);
-      console.log('✅ Auth operation complete, loading set to false');
     }
   };
 
@@ -104,7 +111,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
     setEmail('');
     setPassword('');
     setConfirmPassword('');
-    setToken(''); // Empty token by default
+    setToken(''); // Always reset to empty
     setError('');
     setTokenValidated(null);
     setShowPassword(false);
@@ -190,8 +197,9 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
                   placeholder="Specialized Access Token (Optional)"
                   value={token}
                   onChange={(e) => {
-                    setToken(e.target.value);
-                    handleTokenValidation(e.target.value);
+                    const newToken = e.target.value;
+                    setToken(newToken);
+                    handleTokenValidation(newToken);
                   }}
                   className={`auth-input ${
                     token ? (tokenValidated === true ? 'border-green-500' : tokenValidated === false ? 'border-red-500' : '') : ''

@@ -66,7 +66,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         console.log('🚨 Auth loading timeout reached, setting loading to false');
         setLoading(false);
       }
-    }, 3000); // 3 second timeout for better UX
+    }, 5000); // Increased to 5 seconds for better reliability
 
     // Get initial session
     const getInitialSession = async () => {
@@ -152,25 +152,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.log('👤 Loading profile for user:', authUser.email);
       console.log('🆔 User ID:', authUser.id);
       
-      // Set a longer timeout for profile loading (increased from 2000 to 5000)
-      const profilePromise = supabase
+      // First try to get existing profile
+      const { data: profile, error } = await supabase
         .from('user_profiles')
         .select('*')
         .eq('id', authUser.id)
         .maybeSingle();
 
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Profile loading timeout')), 5000)
-      );
-
-      const { data: profile, error } = await Promise.race([
-        profilePromise,
-        timeoutPromise
-      ]) as any;
-
-      if (error) {
+      if (error && error.code !== 'PGRST116') { // PGRST116 is "no rows returned"
         console.error('❌ Error loading user profile:', error);
-        console.log('⚠️ Creating fallback user due to profile error');
         createFallbackUser(authUser);
         return;
       }
@@ -191,11 +181,76 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           isRegular: profile.role === 'regular'
         });
       } else {
-        console.log('⚠️ No profile found, creating fallback user...');
-        createFallbackUser(authUser);
+        console.log('⚠️ No profile found, creating one...');
+        await createUserProfile(authUser);
       }
     } catch (error) {
       console.error('❌ Error in loadUserProfile:', error);
+      createFallbackUser(authUser);
+    }
+  };
+
+  const createUserProfile = async (authUser: SupabaseUser) => {
+    try {
+      console.log('🔧 Creating user profile for:', authUser.email);
+      
+      // Determine role based on email or token
+      let role: 'admin' | 'regular' | 'specialized' = 'regular';
+      let tokenUsed: string | undefined;
+
+      // Check if admin email
+      if (['rishabh.biry@gmail.com', 'biryrishabh01@gmail.com', 'biryrishabh@gmail.com'].includes(authUser.email || '')) {
+        role = 'admin';
+        console.log('👑 Admin role assigned');
+      } else if (authUser.user_metadata?.token) {
+        // Check if token is valid
+        const isValidToken = await validateToken(authUser.user_metadata.token);
+        if (isValidToken) {
+          role = 'specialized';
+          tokenUsed = authUser.user_metadata.token;
+          console.log('🔑 Specialized role assigned with token');
+        }
+      }
+
+      // Create profile
+      const { data: newProfile, error } = await supabase
+        .from('user_profiles')
+        .insert({
+          id: authUser.id,
+          email: authUser.email || '',
+          role: role,
+          token_used: tokenUsed
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('❌ Error creating profile:', error);
+        createFallbackUser(authUser);
+        return;
+      }
+
+      console.log('✅ Profile created successfully:', newProfile);
+      setUserProfile(newProfile);
+      setUser({
+        id: newProfile.id,
+        email: newProfile.email,
+        role: newProfile.role,
+        isAdmin: newProfile.role === 'admin',
+        isSpecialized: newProfile.role === 'specialized',
+        isRegular: newProfile.role === 'regular'
+      });
+
+      // Deactivate token if used
+      if (tokenUsed) {
+        await supabase
+          .from('user_tokens')
+          .update({ is_active: false })
+          .eq('token', tokenUsed);
+      }
+
+    } catch (error) {
+      console.error('❌ Error creating user profile:', error);
       createFallbackUser(authUser);
     }
   };
@@ -221,48 +276,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     setUser(newUser);
     console.log('✅ Fallback user created successfully:', newUser);
-    
-    // Try to create the profile in the background (don't wait for it)
-    createUserProfileBackground(authUser, role);
-  };
-
-  const createUserProfileBackground = async (authUser: SupabaseUser, role: 'admin' | 'regular' | 'specialized') => {
-    try {
-      console.log('🔧 Creating user profile in background for:', authUser.email);
-      
-      const { error } = await supabase
-        .from('user_profiles')
-        .upsert({
-          id: authUser.id,
-          email: authUser.email || '',
-          role: role
-        }, {
-          onConflict: 'id'
-        });
-
-      if (error) {
-        console.error('❌ Background profile creation failed:', error);
-      } else {
-        console.log('✅ Background profile created successfully');
-      }
-    } catch (error) {
-      console.error('❌ Error in background profile creation:', error);
-    }
   };
 
   const validateToken = async (token: string): Promise<boolean> => {
     try {
       console.log('🔍 Validating token:', token.substring(0, 5) + '...');
       
-      const { data, error } = await Promise.race([
-        supabase
-          .from('user_tokens')
-          .select('*')
-          .eq('token', token)
-          .eq('is_active', true)
-          .single(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Token validation timeout')), 3000))
-      ]) as any;
+      const { data, error } = await supabase
+        .from('user_tokens')
+        .select('*')
+        .eq('token', token)
+        .eq('is_active', true)
+        .single();
 
       const isValid = !error && !!data;
       console.log('🎫 Token validation result:', isValid);
@@ -283,13 +308,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       });
 
       if (error) {
-        console.error('❌ Login error:', error.message, error);
+        console.error('❌ Login error:', error.message);
         return false;
       }
 
       if (data.user) {
         console.log('✅ Login successful, user:', data.user.email);
-        // Don't manually load profile here - let the auth state change handler do it
         return true;
       }
 
@@ -304,6 +328,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const register = async (email: string, password: string, token?: string): Promise<boolean> => {
     try {
       console.log('📝 Starting registration process for:', email);
+      console.log('🎫 Token provided:', !!token);
       
       // Validate token if provided
       if (token) {
@@ -320,29 +345,21 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         email,
         password,
         options: {
-          emailRedirectTo: undefined // Disable email confirmation
+          emailRedirectTo: undefined, // Disable email confirmation
+          data: token ? { token } : {} // Include token in metadata if provided
         }
       };
-
-      // Add token to metadata if provided
-      if (token) {
-        signUpData.options.data = {
-          token: token
-        };
-        console.log('🎫 Token added to signup metadata');
-      }
 
       console.log('📤 Sending signup request to Supabase...');
       const { data, error } = await supabase.auth.signUp(signUpData);
 
       if (error) {
-        console.error('❌ Registration error:', error.message, error);
+        console.error('❌ Registration error:', error.message);
         return false;
       }
 
       if (data.user) {
         console.log('✅ Registration successful, user:', data.user.email);
-        // Don't manually load profile here - let the auth state change handler do it
         return true;
       }
 
