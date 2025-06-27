@@ -51,6 +51,28 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
+// Terminal logging function that prints to server console
+const terminalLog = (message: string, data?: any) => {
+  // Use console.log for terminal output
+  if (data !== undefined) {
+    console.log(`🔍 [AUTH] ${message}`, data);
+  } else {
+    console.log(`🔍 [AUTH] ${message}`);
+  }
+  
+  // Also send to browser console for debugging
+  if (data !== undefined) {
+    console.log(`🔍 [AUTH] ${message}`, data);
+  } else {
+    console.log(`🔍 [AUTH] ${message}`);
+  }
+};
+
+const terminalError = (message: string, error?: any) => {
+  console.error(`❌ [AUTH ERROR] ${message}`, error);
+  console.error(`❌ [AUTH ERROR] ${message}`, error);
+};
+
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -60,10 +82,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     let mounted = true;
     let loadingTimeout: NodeJS.Timeout;
 
+    terminalLog('AuthProvider useEffect started');
+
     // Set a maximum loading time to prevent infinite loading
     loadingTimeout = setTimeout(() => {
       if (mounted) {
-        console.log('🚨 Auth loading timeout reached, setting loading to false');
+        terminalLog('Auth loading timeout reached, setting loading to false');
         setLoading(false);
       }
     }, 3000);
@@ -71,12 +95,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     // Get initial session
     const getInitialSession = async () => {
       try {
-        console.log('🔍 Getting initial session...');
+        terminalLog('Getting initial session...');
         
         const { data: { session }, error } = await supabase.auth.getSession();
         
         if (error) {
-          console.error('❌ Error getting session:', error);
+          terminalError('Error getting session:', error);
           // Clear invalid session data when there's an error
           await supabase.auth.signOut();
           if (mounted) {
@@ -88,15 +112,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
 
         if (session?.user && mounted) {
-          console.log('✅ Found existing session for:', session.user.email);
+          terminalLog('Found existing session for:', session.user.email);
           await loadUserProfile(session.user);
         } else if (mounted) {
-          console.log('ℹ️ No existing session found');
+          terminalLog('No existing session found');
           setUser(null);
           setUserProfile(null);
         }
       } catch (error) {
-        console.error('❌ Error in getInitialSession:', error);
+        terminalError('Error in getInitialSession:', error);
         // Clear invalid session data when there's an exception
         await supabase.auth.signOut();
         if (mounted) {
@@ -107,7 +131,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         if (mounted) {
           clearTimeout(loadingTimeout);
           setLoading(false);
-          console.log('✅ Initial session check complete, loading set to false');
+          terminalLog('Initial session check complete, loading set to false');
         }
       }
     };
@@ -119,13 +143,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       async (event, session) => {
         if (!mounted) return;
 
-        console.log('🔄 Auth state changed:', event, session?.user?.email || 'no user');
+        terminalLog('Auth state changed:', { event, userEmail: session?.user?.email || 'no user' });
 
         // Clear loading timeout when auth state changes
         clearTimeout(loadingTimeout);
 
         if (event === 'SIGNED_OUT' || !session?.user) {
-          console.log('👋 User signed out or no user');
+          terminalLog('User signed out or no user');
           setUser(null);
           setUserProfile(null);
           setLoading(false);
@@ -133,14 +157,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
 
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-          console.log('🔑 User signed in or token refreshed');
+          terminalLog('User signed in or token refreshed');
           if (session?.user) {
             await loadUserProfile(session.user);
           }
         }
 
         setLoading(false);
-        console.log('✅ Auth state change handled, loading set to false');
+        terminalLog('Auth state change handled, loading set to false');
       }
     );
 
@@ -148,13 +172,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       mounted = false;
       clearTimeout(loadingTimeout);
       subscription.unsubscribe();
+      terminalLog('AuthProvider cleanup completed');
     };
   }, []);
 
   const loadUserProfile = async (authUser: SupabaseUser) => {
     try {
-      console.log('👤 Loading profile for user:', authUser.email);
-      console.log('🆔 User ID:', authUser.id);
+      terminalLog('Loading profile for user:', { email: authUser.email, id: authUser.id });
       
       // First try to get existing profile
       const { data: profile, error } = await supabase
@@ -164,13 +188,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         .maybeSingle();
 
       if (error && error.code !== 'PGRST116') { // PGRST116 is "no rows returned"
-        console.error('❌ Error loading user profile:', error);
+        terminalError('Error loading user profile:', error);
         await createUserProfileManually(authUser);
         return;
       }
 
       if (profile) {
-        console.log('✅ Profile loaded successfully:', {
+        terminalLog('Profile loaded successfully:', {
           email: profile.email,
           role: profile.role,
           id: profile.id
@@ -185,22 +209,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           isRegular: profile.role === 'regular'
         });
       } else {
-        console.log('⚠️ No profile found, creating one manually...');
+        terminalLog('No profile found, creating one manually...');
         await createUserProfileManually(authUser);
       }
     } catch (error) {
-      console.error('❌ Error in loadUserProfile:', error);
+      terminalError('Error in loadUserProfile:', error);
       await createUserProfileManually(authUser);
     }
   };
 
   const createUserProfileManually = async (authUser: SupabaseUser) => {
     try {
-      console.log('🔧 Creating user profile manually for:', authUser.email);
+      terminalLog('Creating user profile manually for:', authUser.email);
       
       // Get token from user metadata if available
       const token = authUser.user_metadata?.token;
-      console.log('🎫 Token from metadata:', token ? 'present' : 'none');
+      terminalLog('Token from metadata:', token ? 'present' : 'none');
       
       // Use the manual profile creation function
       const { data: newProfile, error } = await supabase
@@ -211,12 +235,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         });
 
       if (error) {
-        console.error('❌ Error creating profile manually:', error);
+        terminalError('Error creating profile manually:', error);
         createFallbackUser(authUser);
         return;
       }
 
-      console.log('✅ Profile created manually:', newProfile);
+      terminalLog('Profile created manually:', newProfile);
       setUserProfile(newProfile);
       setUser({
         id: newProfile.id,
@@ -228,19 +252,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       });
 
     } catch (error) {
-      console.error('❌ Error creating user profile manually:', error);
+      terminalError('Error creating user profile manually:', error);
       createFallbackUser(authUser);
     }
   };
 
   const createFallbackUser = (authUser: SupabaseUser) => {
-    console.log('🔧 Creating fallback user for:', authUser.email);
+    terminalLog('Creating fallback user for:', authUser.email);
     
     // Determine role based on email
     let role: 'admin' | 'regular' | 'specialized' = 'regular';
     if (['rishabh.biry@gmail.com', 'biryrishabh01@gmail.com', 'biryrishabh@gmail.com'].includes(authUser.email || '')) {
       role = 'admin';
-      console.log('👑 Admin role assigned to fallback user');
+      terminalLog('Admin role assigned to fallback user');
     }
 
     const newUser = {
@@ -253,44 +277,43 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     };
 
     setUser(newUser);
-    console.log('✅ Fallback user created successfully:', newUser);
+    terminalLog('Fallback user created successfully:', newUser);
   };
 
   const validateToken = async (token: string): Promise<boolean> => {
     try {
-      console.log('🔍 Starting token validation for:', token);
-      console.log('🔍 Token length:', token.length);
-      console.log('🔍 Token characters:', token.split('').map(c => c.charCodeAt(0)));
+      terminalLog('Starting token validation for:', token);
+      terminalLog('Token length:', token.length);
       
       // First, let's check if we can connect to the database at all
-      console.log('🔗 Testing database connection...');
+      terminalLog('Testing database connection...');
       const { data: connectionTest, error: connectionError } = await supabase
         .from('user_tokens')
         .select('count')
         .limit(1);
       
       if (connectionError) {
-        console.error('❌ Database connection failed:', connectionError);
+        terminalError('Database connection failed:', connectionError);
         return false;
       }
       
-      console.log('✅ Database connection successful');
+      terminalLog('Database connection successful');
       
       // Now let's get all tokens to see what's in the database
-      console.log('📋 Fetching all tokens from database...');
+      terminalLog('Fetching all tokens from database...');
       const { data: allTokens, error: allTokensError } = await supabase
         .from('user_tokens')
         .select('*');
       
       if (allTokensError) {
-        console.error('❌ Error fetching all tokens:', allTokensError);
+        terminalError('Error fetching all tokens:', allTokensError);
       } else {
-        console.log('📋 All tokens in database:', allTokens);
-        console.log('📋 Number of tokens:', allTokens?.length || 0);
+        terminalLog('All tokens in database:', allTokens);
+        terminalLog('Number of tokens:', allTokens?.length || 0);
         
         if (allTokens) {
           allTokens.forEach((tokenRow, index) => {
-            console.log(`🎫 Token ${index + 1}:`, {
+            terminalLog(`Token ${index + 1}:`, {
               token: tokenRow.token,
               isActive: tokenRow.is_active,
               description: tokenRow.description,
@@ -301,57 +324,52 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
       
       // Now try the specific validation query
-      console.log('🎯 Performing specific token validation...');
+      terminalLog('Performing specific token validation...');
       const { data, error } = await supabase
         .from('user_tokens')
         .select('*')
         .eq('token', token)
         .eq('is_active', true);
 
-      console.log('🎯 Validation query result:', { data, error });
+      terminalLog('Validation query result:', { data, error });
       
       if (error) {
-        console.error('❌ Error in token validation query:', error);
-        console.error('❌ Error code:', error.code);
-        console.error('❌ Error message:', error.message);
-        console.error('❌ Error details:', error.details);
+        terminalError('Error in token validation query:', error);
         return false;
       }
 
       const isValid = data && data.length > 0;
-      console.log('🎫 Token validation result:', isValid);
-      console.log('🎫 Data returned:', data);
+      terminalLog('Token validation result:', isValid);
       
       if (!isValid) {
-        console.log('❌ Token not found or inactive');
+        terminalLog('Token not found or inactive');
         
         // Let's try a more basic query to see if the token exists at all
-        console.log('🔍 Checking if token exists without active filter...');
+        terminalLog('Checking if token exists without active filter...');
         const { data: basicData, error: basicError } = await supabase
           .from('user_tokens')
           .select('*')
           .eq('token', token);
         
-        console.log('🔍 Basic token check result:', { basicData, basicError });
+        terminalLog('Basic token check result:', { basicData, basicError });
         
         if (basicData && basicData.length > 0) {
-          console.log('⚠️ Token exists but may not be active:', basicData[0]);
+          terminalLog('Token exists but may not be active:', basicData[0]);
         } else {
-          console.log('❌ Token does not exist in database at all');
+          terminalLog('Token does not exist in database at all');
         }
       }
       
       return isValid;
     } catch (error) {
-      console.error('❌ Exception in validateToken:', error);
-      console.error('❌ Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+      terminalError('Exception in validateToken:', error);
       return false;
     }
   };
 
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
-      console.log('🔐 Starting login process for:', email);
+      terminalLog('Starting login process for:', email);
       
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
@@ -359,34 +377,34 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       });
 
       if (error) {
-        console.error('❌ Login error:', error.message);
+        terminalError('Login error:', error);
         return false;
       }
 
       if (data.user) {
-        console.log('✅ Login successful, user:', data.user.email);
+        terminalLog('Login successful, user:', data.user.email);
         return true;
       }
 
-      console.log('⚠️ Login returned no user');
+      terminalLog('Login returned no user');
       return false;
     } catch (error) {
-      console.error('❌ Login error (catch):', error);
+      terminalError('Login error (catch):', error);
       return false;
     }
   };
 
   const register = async (email: string, password: string, token?: string): Promise<boolean> => {
     try {
-      console.log('📝 ========== STARTING REGISTRATION PROCESS ==========');
-      console.log('📝 Email:', email);
-      console.log('📝 Password length:', password.length);
-      console.log('📝 Token provided:', !!token);
-      console.log('📝 Token value:', token || 'none');
-      console.log('📝 Current timestamp:', new Date().toISOString());
+      terminalLog('========== STARTING REGISTRATION PROCESS ==========');
+      terminalLog('Email:', email);
+      terminalLog('Password length:', password.length);
+      terminalLog('Token provided:', !!token);
+      terminalLog('Token value:', token || 'none');
+      terminalLog('Current timestamp:', new Date().toISOString());
       
       // Check Supabase connection first
-      console.log('🔗 Testing Supabase connection before registration...');
+      terminalLog('Testing Supabase connection before registration...');
       try {
         const { data: connectionTest, error: connectionError } = await supabase
           .from('user_tokens')
@@ -394,42 +412,35 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           .limit(1);
         
         if (connectionError) {
-          console.error('❌ Supabase connection test failed:', connectionError);
-          console.error('❌ Connection error code:', connectionError.code);
-          console.error('❌ Connection error message:', connectionError.message);
-          console.error('❌ Connection error details:', connectionError.details);
+          terminalError('Supabase connection test failed:', connectionError);
         } else {
-          console.log('✅ Supabase connection test successful');
+          terminalLog('Supabase connection test successful');
         }
       } catch (connError) {
-        console.error('❌ Exception during connection test:', connError);
+        terminalError('Exception during connection test:', connError);
       }
       
       // Validate token if provided
       if (token) {
-        console.log('🎫 ========== TOKEN VALIDATION PHASE ==========');
-        console.log('🎫 Validating provided token before registration...');
-        console.log('🎫 Token to validate:', token);
-        console.log('🎫 Token type:', typeof token);
-        console.log('🎫 Token length:', token.length);
+        terminalLog('========== TOKEN VALIDATION PHASE ==========');
+        terminalLog('Validating provided token before registration...');
+        terminalLog('Token to validate:', token);
         
         const isValidToken = await validateToken(token);
-        console.log('🎫 Pre-registration token validation result:', isValidToken);
+        terminalLog('Pre-registration token validation result:', isValidToken);
         
         if (!isValidToken) {
-          console.error('❌ ========== TOKEN VALIDATION FAILED ==========');
-          console.error('❌ Invalid token provided during registration:', token);
-          console.error('❌ Registration will be aborted due to invalid token');
+          terminalError('========== TOKEN VALIDATION FAILED ==========');
+          terminalError('Invalid token provided during registration:', token);
           throw new Error('Invalid or expired token');
         }
-        console.log('✅ ========== TOKEN VALIDATION PASSED ==========');
-        console.log('✅ Token is valid, proceeding with registration');
+        terminalLog('========== TOKEN VALIDATION PASSED ==========');
       } else {
-        console.log('ℹ️ No token provided, proceeding with regular registration');
+        terminalLog('No token provided, proceeding with regular registration');
       }
 
       // Prepare signup data
-      console.log('📤 ========== PREPARING SIGNUP DATA ==========');
+      terminalLog('========== PREPARING SIGNUP DATA ==========');
       const signUpData: any = {
         email,
         password,
@@ -439,119 +450,151 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
       };
 
-      console.log('📤 Complete signUpData object being sent to Supabase:');
-      console.log('📤 - email:', signUpData.email);
-      console.log('📤 - password: [REDACTED - length:', signUpData.password.length, ']');
-      console.log('📤 - options:', JSON.stringify(signUpData.options, null, 2));
-      console.log('📤 - options.emailRedirectTo:', signUpData.options.emailRedirectTo);
-      console.log('📤 - options.data:', JSON.stringify(signUpData.options.data, null, 2));
-      console.log('📤 - metadata keys:', Object.keys(signUpData.options.data));
-      console.log('📤 - metadata token value:', signUpData.options.data.token);
+      terminalLog('Complete signUpData object being sent to Supabase:');
+      terminalLog('- email:', signUpData.email);
+      terminalLog('- password: [REDACTED - length:', signUpData.password.length, ']');
+      terminalLog('- options:', JSON.stringify(signUpData.options, null, 2));
+      terminalLog('- metadata keys:', Object.keys(signUpData.options.data));
+      terminalLog('- metadata token value:', signUpData.options.data.token);
       
       // Check current auth state before signup
-      console.log('🔍 ========== PRE-SIGNUP AUTH STATE CHECK ==========');
+      terminalLog('========== PRE-SIGNUP AUTH STATE CHECK ==========');
       try {
         const { data: currentSession, error: sessionError } = await supabase.auth.getSession();
-        console.log('🔍 Current session before signup:', {
+        terminalLog('Current session before signup:', {
           hasSession: !!currentSession.session,
           hasUser: !!currentSession.session?.user,
           userEmail: currentSession.session?.user?.email,
           sessionError: sessionError
         });
       } catch (sessionCheckError) {
-        console.error('❌ Error checking current session:', sessionCheckError);
+        terminalError('Error checking current session:', sessionCheckError);
+      }
+      
+      // Check database trigger status
+      terminalLog('========== DATABASE TRIGGER STATUS CHECK ==========');
+      try {
+        const { data: triggerCheck, error: triggerError } = await supabase
+          .rpc('check_trigger_status');
+        
+        if (triggerError) {
+          terminalLog('Could not check trigger status (function may not exist):', triggerError);
+        } else {
+          terminalLog('Trigger status check result:', triggerCheck);
+        }
+      } catch (triggerCheckError) {
+        terminalLog('Exception checking trigger status:', triggerCheckError);
       }
       
       // Perform the actual signup
-      console.log('🚀 ========== EXECUTING SUPABASE SIGNUP ==========');
-      console.log('🚀 Calling supabase.auth.signUp with prepared data...');
-      console.log('🚀 Signup timestamp:', new Date().toISOString());
+      terminalLog('========== EXECUTING SUPABASE SIGNUP ==========');
+      terminalLog('Calling supabase.auth.signUp with prepared data...');
+      terminalLog('Signup timestamp:', new Date().toISOString());
       
       const { data, error } = await supabase.auth.signUp(signUpData);
 
-      console.log('📥 ========== SUPABASE SIGNUP RESPONSE ==========');
-      console.log('📥 Response timestamp:', new Date().toISOString());
-      console.log('📥 Raw data object:', data);
-      console.log('📥 Raw error object:', error);
+      terminalLog('========== SUPABASE SIGNUP RESPONSE ==========');
+      terminalLog('Response timestamp:', new Date().toISOString());
+      terminalLog('Raw data object:', data);
+      terminalLog('Raw error object:', error);
       
       if (data) {
-        console.log('📥 Data breakdown:');
-        console.log('📥 - data.user:', data.user);
-        console.log('📥 - data.session:', data.session);
+        terminalLog('Data breakdown:');
+        terminalLog('- data.user:', data.user);
+        terminalLog('- data.session:', data.session);
         
         if (data.user) {
-          console.log('📥 User details:');
-          console.log('📥 - user.id:', data.user.id);
-          console.log('📥 - user.email:', data.user.email);
-          console.log('📥 - user.email_confirmed_at:', data.user.email_confirmed_at);
-          console.log('📥 - user.created_at:', data.user.created_at);
-          console.log('📥 - user.user_metadata:', JSON.stringify(data.user.user_metadata, null, 2));
-          console.log('📥 - user.app_metadata:', JSON.stringify(data.user.app_metadata, null, 2));
-          console.log('📥 - user.aud:', data.user.aud);
-          console.log('📥 - user.role:', data.user.role);
+          terminalLog('User details:');
+          terminalLog('- user.id:', data.user.id);
+          terminalLog('- user.email:', data.user.email);
+          terminalLog('- user.email_confirmed_at:', data.user.email_confirmed_at);
+          terminalLog('- user.created_at:', data.user.created_at);
+          terminalLog('- user.user_metadata:', JSON.stringify(data.user.user_metadata, null, 2));
+          terminalLog('- user.app_metadata:', JSON.stringify(data.user.app_metadata, null, 2));
+          terminalLog('- user.aud:', data.user.aud);
+          terminalLog('- user.role:', data.user.role);
         }
         
         if (data.session) {
-          console.log('📥 Session details:');
-          console.log('📥 - session.access_token: [PRESENT]');
-          console.log('📥 - session.refresh_token: [PRESENT]');
-          console.log('📥 - session.expires_at:', data.session.expires_at);
-          console.log('📥 - session.token_type:', data.session.token_type);
+          terminalLog('Session details:');
+          terminalLog('- session.access_token: [PRESENT]');
+          terminalLog('- session.refresh_token: [PRESENT]');
+          terminalLog('- session.expires_at:', data.session.expires_at);
+          terminalLog('- session.token_type:', data.session.token_type);
         }
       }
 
       if (error) {
-        console.error('❌ ========== SUPABASE SIGNUP ERROR ==========');
-        console.error('❌ Error object:', error);
-        console.error('❌ Error message:', error.message);
-        console.error('❌ Error code:', error.code);
-        console.error('❌ Error status:', error.status);
+        terminalError('========== SUPABASE SIGNUP ERROR ==========');
+        terminalError('Error object:', error);
+        terminalError('Error message:', error.message);
+        terminalError('Error code:', error.code);
+        terminalError('Error status:', error.status);
         
         // Log all error properties
-        console.error('❌ All error properties:');
+        terminalError('All error properties:');
         Object.keys(error).forEach(key => {
-          console.error(`❌ - error.${key}:`, (error as any)[key]);
+          terminalError(`- error.${key}:`, (error as any)[key]);
         });
         
         // Check if it's a specific type of error
         if (error.message?.includes('Database error')) {
-          console.error('❌ ========== DATABASE ERROR DETECTED ==========');
-          console.error('❌ This appears to be a server-side database error');
-          console.error('❌ Possible causes:');
-          console.error('❌ 1. RLS policies blocking user creation');
-          console.error('❌ 2. Database triggers failing');
-          console.error('❌ 3. Foreign key constraints');
-          console.error('❌ 4. Missing required columns');
-          console.error('❌ 5. Database connection issues');
+          terminalError('========== DATABASE ERROR DETECTED ==========');
+          terminalError('This appears to be a server-side database error');
+          terminalError('Possible causes:');
+          terminalError('1. RLS policies blocking user creation');
+          terminalError('2. Database triggers failing');
+          terminalError('3. Foreign key constraints');
+          terminalError('4. Missing required columns');
+          terminalError('5. Database connection issues');
+          
+          // Try to get more specific error information
+          try {
+            terminalLog('========== ATTEMPTING MANUAL PROFILE CREATION ==========');
+            const { data: manualProfile, error: manualError } = await supabase
+              .rpc('create_user_profile_manual', {
+                user_id: data?.user?.id || 'test-id',
+                user_email: email,
+                user_token: token || null
+              });
+            
+            if (manualError) {
+              terminalError('Manual profile creation also failed:', manualError);
+            } else {
+              terminalLog('Manual profile creation succeeded:', manualProfile);
+            }
+          } catch (manualTestError) {
+            terminalError('Exception during manual profile test:', manualTestError);
+          }
         }
         
         return false;
       }
 
       if (data.user) {
-        console.log('✅ ========== REGISTRATION SUCCESSFUL ==========');
-        console.log('✅ Registration successful, user:', data.user.email);
-        console.log('✅ User ID:', data.user.id);
-        console.log('✅ User metadata after registration:', JSON.stringify(data.user.user_metadata, null, 2));
-        console.log('✅ Email confirmed:', !!data.user.email_confirmed_at);
+        terminalLog('========== REGISTRATION SUCCESSFUL ==========');
+        terminalLog('Registration successful, user:', data.user.email);
+        terminalLog('User ID:', data.user.id);
+        terminalLog('User metadata after registration:', JSON.stringify(data.user.user_metadata, null, 2));
+        terminalLog('Email confirmed:', !!data.user.email_confirmed_at);
         
         // Check if user was created in auth.users
-        console.log('🔍 ========== POST-SIGNUP VERIFICATION ==========');
+        terminalLog('========== POST-SIGNUP VERIFICATION ==========');
         try {
           const { data: authUser, error: authError } = await supabase.auth.getUser();
-          console.log('🔍 Auth user check result:', { authUser, authError });
+          terminalLog('Auth user check result:', { authUser, authError });
         } catch (authCheckError) {
-          console.error('❌ Error checking auth user:', authCheckError);
+          terminalError('Error checking auth user:', authCheckError);
         }
         
         // Wait a moment for triggers to execute, then manually create profile if needed
-        console.log('⏳ ========== PROFILE CREATION PHASE ==========');
-        console.log('⏳ Waiting for database triggers to execute...');
+        terminalLog('========== PROFILE CREATION PHASE ==========');
+        terminalLog('Waiting for database triggers to execute...');
         
         setTimeout(async () => {
           try {
-            console.log('🔍 Checking if profile was created by trigger...');
-            console.log('🔍 Looking for profile with ID:', data.user!.id);
+            terminalLog('Checking if profile was created by trigger...');
+            terminalLog('Looking for profile with ID:', data.user!.id);
             
             const { data: existingProfile, error: profileError } = await supabase
               .from('user_profiles')
@@ -559,57 +602,51 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               .eq('id', data.user!.id)
               .maybeSingle();
             
-            console.log('🔍 Profile check result:');
-            console.log('🔍 - existingProfile:', existingProfile);
-            console.log('🔍 - profileError:', profileError);
+            terminalLog('Profile check result:');
+            terminalLog('- existingProfile:', existingProfile);
+            terminalLog('- profileError:', profileError);
             
             if (profileError) {
-              console.error('❌ Error checking for existing profile:', profileError);
-              console.error('❌ Profile error code:', profileError.code);
-              console.error('❌ Profile error message:', profileError.message);
+              terminalError('Error checking for existing profile:', profileError);
             }
             
             if (!existingProfile) {
-              console.log('⚠️ ========== MANUAL PROFILE CREATION ==========');
-              console.log('⚠️ Profile not created by trigger, creating manually...');
+              terminalLog('========== MANUAL PROFILE CREATION ==========');
+              terminalLog('Profile not created by trigger, creating manually...');
               await createUserProfileManually(data.user!);
             } else {
-              console.log('✅ ========== PROFILE EXISTS FROM TRIGGER ==========');
-              console.log('✅ Profile exists from trigger:', existingProfile);
-              console.log('✅ Profile role:', existingProfile.role);
-              console.log('✅ Profile email:', existingProfile.email);
+              terminalLog('========== PROFILE EXISTS FROM TRIGGER ==========');
+              terminalLog('Profile exists from trigger:', existingProfile);
+              terminalLog('Profile role:', existingProfile.role);
+              terminalLog('Profile email:', existingProfile.email);
             }
           } catch (error) {
-            console.error('❌ ========== PROFILE CHECK/CREATION ERROR ==========');
-            console.error('❌ Error checking/creating profile after registration:', error);
-            console.error('❌ Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+            terminalError('========== PROFILE CHECK/CREATION ERROR ==========');
+            terminalError('Error checking/creating profile after registration:', error);
           }
         }, 1000);
         
-        console.log('✅ ========== REGISTRATION PROCESS COMPLETE ==========');
+        terminalLog('========== REGISTRATION PROCESS COMPLETE ==========');
         return true;
       }
 
-      console.log('⚠️ ========== UNEXPECTED REGISTRATION STATE ==========');
-      console.log('⚠️ Registration returned no user but no error either');
-      console.log('⚠️ This is an unexpected state that should be investigated');
+      terminalLog('========== UNEXPECTED REGISTRATION STATE ==========');
+      terminalLog('Registration returned no user but no error either');
       return false;
     } catch (error) {
-      console.error('❌ ========== REGISTRATION EXCEPTION ==========');
-      console.error('❌ Registration error (catch):', error);
-      console.error('❌ Error type:', typeof error);
-      console.error('❌ Error constructor:', error?.constructor?.name);
+      terminalError('========== REGISTRATION EXCEPTION ==========');
+      terminalError('Registration error (catch):', error);
       
       if (error instanceof Error) {
-        console.error('❌ Error message:', error.message);
-        console.error('❌ Error stack:', error.stack);
+        terminalError('Error message:', error.message);
+        terminalError('Error stack:', error.stack);
       }
       
       // Log all error properties if it's an object
       if (typeof error === 'object' && error !== null) {
-        console.error('❌ All error properties:');
+        terminalError('All error properties:');
         Object.keys(error).forEach(key => {
-          console.error(`❌ - error.${key}:`, (error as any)[key]);
+          terminalError(`- error.${key}:`, (error as any)[key]);
         });
       }
       
@@ -619,7 +656,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const logout = async (): Promise<void> => {
     try {
-      console.log('👋 Starting logout process...');
+      terminalLog('Starting logout process...');
       
       // Clear local state immediately for better UX
       setUser(null);
@@ -629,13 +666,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const { error } = await supabase.auth.signOut();
       
       if (error) {
-        console.error('❌ Logout error:', error);
+        terminalError('Logout error:', error);
         throw error;
       }
       
-      console.log('✅ Logout successful');
+      terminalLog('Logout successful');
     } catch (error) {
-      console.error('❌ Logout error:', error);
+      terminalError('Logout error:', error);
       // Even if logout fails, clear local state
       setUser(null);
       setUserProfile(null);
@@ -652,7 +689,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const canComment = isAdmin || isSpecialized;
   const canEditContent = isAdmin;
 
-  console.log('🔍 Current auth state:', {
+  terminalLog('Current auth state:', {
     loading,
     isAuthenticated,
     userEmail: user?.email,
