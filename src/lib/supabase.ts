@@ -16,14 +16,6 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   }
 });
 
-// Clear any invalid session on initialization
-supabase.auth.onAuthStateChange((event, session) => {
-  if (event === 'TOKEN_REFRESHED' && !session) {
-    // If token refresh failed, clear the session
-    supabase.auth.signOut();
-  }
-});
-
 // Database types
 export interface UserStatistics {
   id: string;
