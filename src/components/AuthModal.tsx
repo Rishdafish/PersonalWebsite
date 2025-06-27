@@ -16,11 +16,16 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
   const [loading, setLoading] = useState(false);
   const [tokenValidated, setTokenValidated] = useState<boolean | null>(null);
   
-  const { login, register, validateToken } = useAuth();
+  const { login, register, validateToken, isSupabaseConfigured } = useAuth();
 
   const handleTokenValidation = async (tokenValue: string) => {
     if (!tokenValue.trim()) {
       setTokenValidated(null);
+      return;
+    }
+
+    if (!isSupabaseConfigured) {
+      setTokenValidated(false);
       return;
     }
 
@@ -34,6 +39,13 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
     setLoading(true);
 
     try {
+      // Check if Supabase is configured
+      if (!isSupabaseConfigured) {
+        setError('Authentication service is not configured. Please contact the administrator.');
+        setLoading(false);
+        return;
+      }
+
       if (!isLogin) {
         // Registration validation
         if (password !== confirmPassword) {
@@ -59,14 +71,8 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
       
       if (isLogin) {
         success = await login(email, password);
-        if (!success) {
-          setError('Invalid email or password');
-        }
       } else {
         success = await register(email, password, token || undefined);
-        if (!success) {
-          setError('Registration failed. Please check your details and try again.');
-        }
       }
 
       if (success) {
@@ -109,6 +115,14 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
         
         <h2>{isLogin ? 'Login' : 'Create Account'}</h2>
         
+        {!isSupabaseConfigured && (
+          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-red-800 text-sm">
+              ⚠️ Authentication service is not configured. Please contact the administrator to set up the database connection.
+            </p>
+          </div>
+        )}
+        
         <form onSubmit={handleSubmit} className="auth-form">
           <input
             type="email"
@@ -117,6 +131,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
             onChange={(e) => setEmail(e.target.value)}
             className="auth-input"
             required
+            disabled={!isSupabaseConfigured}
           />
           
           <input
@@ -126,6 +141,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
             onChange={(e) => setPassword(e.target.value)}
             className="auth-input"
             required
+            disabled={!isSupabaseConfigured}
           />
           
           {!isLogin && (
@@ -137,6 +153,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 className="auth-input"
                 required
+                disabled={!isSupabaseConfigured}
               />
               
               <div className="relative">
@@ -151,8 +168,9 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
                   className={`auth-input ${
                     token ? (tokenValidated === true ? 'border-green-500' : tokenValidated === false ? 'border-red-500' : '') : ''
                   }`}
+                  disabled={!isSupabaseConfigured}
                 />
-                {token && (
+                {token && isSupabaseConfigured && (
                   <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
                     {tokenValidated === true && (
                       <div className="w-4 h-4 bg-green-500 rounded-full flex items-center justify-center">
@@ -187,7 +205,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
           <button 
             type="submit" 
             className="auth-button interactive"
-            disabled={loading}
+            disabled={loading || !isSupabaseConfigured}
           >
             {loading ? 'Processing...' : (isLogin ? 'Login' : 'Create Account')}
           </button>
@@ -198,6 +216,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
             type="button"
             onClick={toggleMode}
             className="interactive"
+            disabled={!isSupabaseConfigured}
           >
             {isLogin ? 'Need an account? Register' : 'Have an account? Login'}
           </button>

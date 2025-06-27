@@ -35,6 +35,7 @@ interface AuthContextType {
   canEditContent: boolean;
   loading: boolean;
   validateToken: (token: string) => Promise<boolean>;
+  isSupabaseConfigured: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -56,14 +57,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Check if Supabase is properly configured
+  const isSupabaseConfigured = !!(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY);
+
   useEffect(() => {
     let mounted = true;
 
     // Get initial session with improved error handling
     const getInitialSession = async () => {
       try {
-        // Check if Supabase is properly configured
-        if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
+        if (!isSupabaseConfigured) {
           console.warn('Supabase environment variables not configured');
           if (mounted) {
             setLoading(false);
@@ -97,26 +100,32 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     getInitialSession();
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (mounted) {
-          if (session?.user) {
-            await loadUserProfile(session.user);
-          } else {
-            setUser(null);
-            setUserProfile(null);
+    // Listen for auth changes only if Supabase is configured
+    let subscription: any = null;
+    if (isSupabaseConfigured) {
+      const { data } = supabase.auth.onAuthStateChange(
+        async (event, session) => {
+          if (mounted) {
+            if (session?.user) {
+              await loadUserProfile(session.user);
+            } else {
+              setUser(null);
+              setUserProfile(null);
+            }
+            setLoading(false);
           }
-          setLoading(false);
         }
-      }
-    );
+      );
+      subscription = data.subscription;
+    }
 
     return () => {
       mounted = false;
-      subscription.unsubscribe();
+      if (subscription) {
+        subscription.unsubscribe();
+      }
     };
-  }, []);
+  }, [isSupabaseConfigured]);
 
   const loadUserProfile = async (authUser: SupabaseUser) => {
     try {
@@ -179,6 +188,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const validateToken = async (token: string): Promise<boolean> => {
+    if (!isSupabaseConfigured) {
+      return false;
+    }
+
     try {
       const { data, error } = await supabase
         .from('user_tokens')
@@ -195,6 +208,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const login = async (email: string, password: string): Promise<boolean> => {
+    if (!isSupabaseConfigured) {
+      throw new Error('Authentication service is not configured. Please contact the administrator.');
+    }
+
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
@@ -203,7 +220,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (error) {
         console.error('Login error:', error.message);
-        return false;
+        throw new Error(error.message);
       }
 
       if (data.user) {
@@ -211,14 +228,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return true;
       }
 
-      return false;
-    } catch (error) {
+      throw new Error('Login failed - no user data received');
+    } catch (error: any) {
       console.error('Login error:', error);
-      return false;
+      throw error;
     }
   };
 
   const register = async (email: string, password: string, token?: string): Promise<boolean> => {
+    if (!isSupabaseConfigured) {
+      throw new Error('Authentication service is not configured. Please contact the administrator.');
+    }
+
     try {
       // Validate token if provided
       if (token && !(await validateToken(token))) {
@@ -243,7 +264,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (error) {
         console.error('Registration error:', error.message);
-        return false;
+        throw new Error(error.message);
       }
 
       if (data.user) {
@@ -252,16 +273,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return true;
       }
 
-      return false;
-    } catch (error) {
+      throw new Error('Registration failed - no user data received');
+    } catch (error: any) {
       console.error('Registration error:', error);
-      return false;
+      throw error;
     }
   };
 
   const logout = async () => {
     try {
-      await supabase.auth.signOut();
+      if (isSupabaseConfigured) {
+        await supabase.auth.signOut();
+      }
       setUser(null);
       setUserProfile(null);
     } catch (error) {
@@ -293,7 +316,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       canComment,
       canEditContent,
       loading,
-      validateToken
+      validateToken,
+      isSupabaseConfigured
     }}>
       {children}
     </AuthContext.Provider>
