@@ -80,35 +80,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         .from('user_profiles')
         .select('role')
         .eq('id', authUser.id)
-        .maybeSingle();
+        .single();
 
       if (error) {
         console.error('Error loading user profile:', error);
-        // Set user with default role if profile loading fails
-        setUser({
-          id: authUser.id,
-          email: authUser.email || '',
-          role: 'regular' as UserRole
-        });
         return;
       }
 
-      // If no profile found, use default role
-      const userRole = profile?.role || 'regular';
-
       setUser({
         id: authUser.id,
         email: authUser.email || '',
-        role: userRole as UserRole
+        role: profile.role as UserRole
       });
     } catch (error) {
       console.error('Error loading user profile:', error);
-      // Set user with default role if any error occurs
-      setUser({
-        id: authUser.id,
-        email: authUser.email || '',
-        role: 'regular' as UserRole
-      });
     }
   };
 
