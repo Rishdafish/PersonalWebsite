@@ -57,17 +57,41 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let mounted = true;
+
     // Get initial session
     const getInitialSession = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.error('Error getting session:', error);
+          // Clear any invalid session data
+          await supabase.auth.signOut();
+          if (mounted) {
+            setUser(null);
+            setUserProfile(null);
+            setLoading(false);
+          }
+          return;
+        }
+
+        if (session?.user && mounted) {
           await loadUserProfile(session.user);
+        } else if (mounted) {
+          setUser(null);
+          setUserProfile(null);
         }
       } catch (error) {
-        console.error('Error getting initial session:', error);
+        console.error('Error in getInitialSession:', error);
+        if (mounted) {
+          setUser(null);
+          setUserProfile(null);
+        }
       } finally {
-        setLoading(false);
+        if (mounted) {
+          setLoading(false);
+        }
       }
     };
 
@@ -76,21 +100,37 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        if (session?.user) {
-          await loadUserProfile(session.user);
-        } else {
+        if (!mounted) return;
+
+        console.log('Auth state changed:', event, session?.user?.email);
+
+        if (event === 'SIGNED_OUT' || !session?.user) {
           setUser(null);
           setUserProfile(null);
+          setLoading(false);
+          return;
         }
+
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          if (session?.user) {
+            await loadUserProfile(session.user);
+          }
+        }
+
         setLoading(false);
       }
     );
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const loadUserProfile = async (authUser: SupabaseUser) => {
     try {
+      console.log('Loading profile for user:', authUser.email);
+      
       const { data: profile, error } = await supabase
         .from('user_profiles')
         .select('*')
@@ -99,6 +139,72 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (error) {
         console.error('Error loading user profile:', error);
+        
+        // If profile doesn't exist, try to create it
+        if (error.code === 'PGRST116') {
+          console.log('Profile not found, creating...');
+          await createUserProfile(authUser);
+          return;
+        }
+        
+        // For other errors, set a default user
+        setUser({
+          id: authUser.id,
+          email: authUser.email || '',
+          role: 'regular',
+          isAdmin: false,
+          isSpecialized: false,
+          isRegular: true
+        });
+        return;
+      }
+
+      if (profile) {
+        console.log('Profile loaded:', profile);
+        setUserProfile(profile);
+        setUser({
+          id: profile.id,
+          email: profile.email,
+          role: profile.role,
+          isAdmin: profile.role === 'admin',
+          isSpecialized: profile.role === 'specialized',
+          isRegular: profile.role === 'regular'
+        });
+      }
+    } catch (error) {
+      console.error('Error in loadUserProfile:', error);
+      // Set a fallback user to prevent infinite loading
+      setUser({
+        id: authUser.id,
+        email: authUser.email || '',
+        role: 'regular',
+        isAdmin: false,
+        isSpecialized: false,
+        isRegular: true
+      });
+    }
+  };
+
+  const createUserProfile = async (authUser: SupabaseUser) => {
+    try {
+      // Determine role based on email
+      let role: 'admin' | 'regular' | 'specialized' = 'regular';
+      if (['rishabh.biry@gmail.com', 'biryrishabh01@gmail.com', 'biryrishabh@gmail.com'].includes(authUser.email || '')) {
+        role = 'admin';
+      }
+
+      const { data: profile, error } = await supabase
+        .from('user_profiles')
+        .insert([{
+          id: authUser.id,
+          email: authUser.email || '',
+          role: role
+        }])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error creating user profile:', error);
         return;
       }
 
@@ -114,7 +220,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         });
       }
     } catch (error) {
-      console.error('Error loading user profile:', error);
+      console.error('Error creating user profile:', error);
     }
   };
 
@@ -136,6 +242,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
+      setLoading(true);
+      
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -143,25 +251,32 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (error) {
         console.error('Login error:', error.message);
+        setLoading(false);
         return false;
       }
 
       if (data.user) {
         await loadUserProfile(data.user);
+        setLoading(false);
         return true;
       }
 
+      setLoading(false);
       return false;
     } catch (error) {
       console.error('Login error:', error);
+      setLoading(false);
       return false;
     }
   };
 
   const register = async (email: string, password: string, token?: string): Promise<boolean> => {
     try {
+      setLoading(true);
+      
       // Validate token if provided
       if (token && !(await validateToken(token))) {
+        setLoading(false);
         throw new Error('Invalid or expired token');
       }
 
@@ -183,32 +298,38 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (error) {
         console.error('Registration error:', error.message);
+        setLoading(false);
         return false;
       }
 
       if (data.user) {
-        // User profile will be created automatically by the trigger
-        // Load the profile after a short delay to ensure trigger has executed
+        // Wait a moment for triggers to execute, then load profile
         setTimeout(async () => {
           await loadUserProfile(data.user!);
-        }, 1000);
+          setLoading(false);
+        }, 2000);
         return true;
       }
 
+      setLoading(false);
       return false;
     } catch (error) {
       console.error('Registration error:', error);
+      setLoading(false);
       return false;
     }
   };
 
   const logout = async () => {
     try {
+      setLoading(true);
       await supabase.auth.signOut();
       setUser(null);
       setUserProfile(null);
     } catch (error) {
       console.error('Logout error:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -220,18 +341,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const hasHoursAccess = isAdmin || isSpecialized;
   const canComment = isAdmin || isSpecialized;
   const canEditContent = isAdmin;
-
-  // Don't render children until we've checked the initial session
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <AuthContext.Provider value={{
