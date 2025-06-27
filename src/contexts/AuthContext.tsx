@@ -29,6 +29,12 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
+// Helper function to validate UUID format
+const isValidUUID = (uuid: string): boolean => {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(uuid);
+};
+
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
 
@@ -41,13 +47,21 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     // Check for stored user session
     const storedUser = localStorage.getItem('user');
     if (storedUser) {
-      const parsedUser = JSON.parse(storedUser);
-      // Ensure the stored user has an ID
-      if (!parsedUser.id) {
-        parsedUser.id = parsedUser.email === ADMIN_EMAIL ? ADMIN_ID : crypto.randomUUID();
-        localStorage.setItem('user', JSON.stringify(parsedUser));
+      try {
+        const parsedUser = JSON.parse(storedUser);
+        
+        // Validate that the user has a valid UUID
+        if (!parsedUser.id || !isValidUUID(parsedUser.id)) {
+          console.warn('Invalid user ID found in localStorage, clearing user data');
+          localStorage.removeItem('user');
+          return;
+        }
+        
+        setUser(parsedUser);
+      } catch (error) {
+        console.error('Error parsing stored user data:', error);
+        localStorage.removeItem('user');
       }
-      setUser(parsedUser);
     }
   }, []);
 
@@ -65,8 +79,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const foundUser = users.find((u: any) => u.email === email && u.password === password);
     
     if (foundUser) {
-      // Ensure user has an ID
-      if (!foundUser.id) {
+      // Ensure user has a valid UUID
+      if (!foundUser.id || !isValidUUID(foundUser.id)) {
         foundUser.id = crypto.randomUUID();
         // Update the stored users array with the new ID
         const updatedUsers = users.map((u: any) => 
