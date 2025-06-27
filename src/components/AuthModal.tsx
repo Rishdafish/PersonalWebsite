@@ -27,14 +27,18 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
       return;
     }
 
+    console.log('🎫 Validating token in modal:', tokenValue.substring(0, 5) + '...');
     const isValid = await validateToken(tokenValue);
     setTokenValidated(isValid);
+    console.log('🎫 Token validation result in modal:', isValid);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
+
+    console.log('📝 Form submitted:', { isLogin, email, hasToken: !!token });
 
     try {
       if (!isLogin) {
@@ -58,27 +62,34 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
       let success = false;
       
       if (isLogin) {
+        console.log('🔐 Attempting login...');
         success = await login(email, password);
         if (!success) {
-          setError('Invalid email or password');
+          setError('Invalid email or password. Please check your credentials and try again.');
         }
       } else {
+        console.log('📝 Attempting registration...');
         success = await register(email, password, token || undefined);
         if (!success) {
           setError('Registration failed. Please check your details and try again.');
         }
       }
 
+      console.log('✅ Auth operation result:', success);
+
       if (success) {
+        console.log('🎉 Auth successful, calling onAuthSuccess');
         // Add a small delay to allow auth state to update
         setTimeout(() => {
           onAuthSuccess();
-        }, 500);
+        }, 1000);
       }
     } catch (err: any) {
+      console.error('❌ Auth error in modal:', err);
       setError(err.message || 'An error occurred. Please try again.');
     } finally {
       setLoading(false);
+      console.log('✅ Auth operation complete, loading set to false');
     }
   };
 
@@ -221,14 +232,28 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
             </>
           )}
           
-          {error && <div className="error-message">{error}</div>}
+          {error && (
+            <div className="error-message">
+              {error}
+              <div className="text-xs mt-1 text-gray-600">
+                Check the browser console for detailed error information.
+              </div>
+            </div>
+          )}
           
           <button 
             type="submit" 
             className="auth-button interactive"
             disabled={loading}
           >
-            {loading ? 'Processing...' : (isLogin ? 'Login' : 'Create Account')}
+            {loading ? (
+              <div className="flex items-center justify-center space-x-2">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                <span>Processing...</span>
+              </div>
+            ) : (
+              isLogin ? 'Login' : 'Create Account'
+            )}
           </button>
         </form>
         
