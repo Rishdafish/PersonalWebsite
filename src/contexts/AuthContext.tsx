@@ -37,6 +37,7 @@ interface AuthContextType {
   validateToken: (token: string) => Promise<boolean>;
   isSupabaseConfigured: boolean;
   connectionError: string | null;
+  retryConnection: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -53,10 +54,10 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
-// Helper function to handle promises with timeout - increased timeout for better reliability
+// Reduced timeout for faster feedback and retry logic
 const withTimeout = async <T>(
   promise: Promise<T>,
-  timeoutMs: number = 60000,
+  timeoutMs: number = 15000,
   errorMessage: string = 'Request timed out'
 ): Promise<T> => {
   const timeoutPromise = new Promise<never>((_, reject) => {
@@ -71,67 +72,97 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   // Check if Supabase is properly configured
   const isSupabaseConfigured = !!(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY);
 
-  // Test Supabase connection with improved error handling
+  // Simple connection test with better error detection
   const testSupabaseConnection = async (): Promise<boolean> => {
     if (!isSupabaseConfigured) {
-      setConnectionError('Supabase environment variables are not configured');
+      setConnectionError('Supabase environment variables are not configured. Please check your .env file.');
       return false;
     }
 
     try {
-      // Use a simpler health check with increased timeout
+      // Use a simple health check with shorter timeout
       const { error } = await withTimeout(
         supabase.auth.getSession(),
-        60000,
-        'Connection timeout - please check your internet connection'
+        10000,
+        'Connection timeout'
       );
 
-      if (error && error.message.includes('Invalid API key')) {
-        setConnectionError('Invalid Supabase configuration. Please contact the administrator.');
-        return false;
+      if (error) {
+        if (error.message.includes('Invalid API key') || error.message.includes('JWT')) {
+          setConnectionError('Invalid Supabase configuration. Please verify your environment variables.');
+          return false;
+        }
+        
+        if (error.message.includes('fetch')) {
+          setConnectionError('Network error. Your Supabase project may be paused or unreachable.');
+          return false;
+        }
       }
 
-      if (error && error.message.includes('JWT')) {
-        setConnectionError('Invalid Supabase API key. Please contact the administrator.');
-        return false;
-      }
-
-      // If we get here without throwing, the connection is working
       setConnectionError(null);
+      setRetryCount(0);
       return true;
     } catch (error: any) {
       console.error('Supabase connection test error:', error);
+      
       if (error.message.includes('timeout')) {
-        setConnectionError('Connection timeout. Please check your internet connection.');
-      } else if (error.message.includes('fetch')) {
-        setConnectionError('Network error. Please check your internet connection.');
+        setConnectionError('Connection timeout. Your Supabase project may be paused due to inactivity. Please check your Supabase dashboard.');
+      } else if (error.message.includes('fetch') || error.message.includes('network')) {
+        setConnectionError('Network error. Please check your internet connection or verify your Supabase project is active.');
       } else {
-        setConnectionError('Unable to connect to the authentication service. Please try again later.');
+        setConnectionError('Unable to connect to the database. Please try again or check your Supabase project status.');
       }
       return false;
     }
   };
 
+  // Retry connection function
+  const retryConnection = async (): Promise<void> => {
+    setLoading(true);
+    setRetryCount(prev => prev + 1);
+    
+    const connectionOk = await testSupabaseConnection();
+    if (connectionOk) {
+      // Try to get session again
+      try {
+        const { data: { session }, error } = await withTimeout(
+          supabase.auth.getSession(),
+          15000,
+          'Session check timeout'
+        );
+        
+        if (!error && session?.user) {
+          await loadUserProfile(session.user);
+        }
+      } catch (error) {
+        console.error('Error getting session after retry:', error);
+      }
+    }
+    
+    setLoading(false);
+  };
+
   useEffect(() => {
     let mounted = true;
 
-    // Get initial session with improved error handling
+    // Get initial session with better error handling
     const getInitialSession = async () => {
       try {
         if (!isSupabaseConfigured) {
           console.warn('Supabase environment variables not configured');
-          setConnectionError('Authentication service is not configured');
+          setConnectionError('Authentication service is not configured. Please check your environment variables.');
           if (mounted) {
             setLoading(false);
           }
           return;
         }
 
-        // Test connection first with increased timeout
+        // Test connection first with shorter timeout
         const connectionOk = await testSupabaseConnection();
         if (!connectionOk) {
           if (mounted) {
@@ -140,16 +171,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           return;
         }
 
-        // Get session with increased timeout
+        // Get session with shorter timeout
         const { data: { session }, error } = await withTimeout(
           supabase.auth.getSession(),
-          60000,
+          15000,
           'Session check timeout'
         );
         
         if (error) {
           console.error('Error getting session:', error);
-          setConnectionError('Failed to retrieve session. Please try logging in again.');
+          setConnectionError('Failed to retrieve session. Please try refreshing the page.');
           if (mounted) {
             setLoading(false);
           }
@@ -166,7 +197,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       } catch (error: any) {
         console.error('Error getting initial session:', error);
         if (error.message.includes('timeout')) {
-          setConnectionError('Connection timeout. Please check your internet connection and try again.');
+          setConnectionError('Connection timeout. Your Supabase project may be paused. Please check your dashboard and try again.');
         } else {
           setConnectionError('Failed to initialize authentication. Please refresh the page.');
         }
@@ -196,7 +227,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 setLoading(false);
               } catch (error) {
                 console.error('Error in auth state change:', error);
-                // Don't set connection error here, just log it
                 setLoading(false);
               }
             }
@@ -231,20 +261,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return;
       }
 
-      // Check if user_profiles table exists and has data with increased timeout
+      // Check if user_profiles table exists and has data with shorter timeout
       const { data: profile, error } = await withTimeout(
         supabase
           .from('user_profiles')
           .select('*')
           .eq('id', authUser.id)
           .maybeSingle(),
-        60000,
+        10000,
         'Profile loading timeout'
       );
 
       if (error && error.code !== 'PGRST116') {
         console.error('Error loading user profile:', error);
-        // Fall back to basic user info
+        // Fall back to basic user info instead of failing
         createBasicUser(authUser);
         return;
       }
@@ -265,9 +295,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
     } catch (error: any) {
       console.error('Error loading user profile:', error);
-      if (error.message.includes('timeout')) {
-        console.warn('Profile loading timeout, using basic user info');
-      }
+      // Always fall back to basic user info to prevent blocking the app
       createBasicUser(authUser);
     }
   };
@@ -309,7 +337,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           .eq('token', token)
           .eq('is_active', true)
           .maybeSingle(),
-        60000,
+        10000,
         'Token validation timeout'
       );
 
@@ -328,7 +356,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     // Test connection first
     const connectionOk = await testSupabaseConnection();
     if (!connectionOk) {
-      throw new Error(connectionError || 'Unable to connect to the authentication service. Please try again later.');
+      throw new Error(connectionError || 'Unable to connect to the authentication service. Your Supabase project may be paused.');
     }
 
     try {
@@ -337,8 +365,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           email,
           password,
         }),
-        60000,
-        'Login request timeout - please check your connection'
+        15000,
+        'Login request timeout'
       );
 
       if (error) {
@@ -366,7 +394,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     } catch (error: any) {
       console.error('Login error:', error);
       if (error.message.includes('timeout')) {
-        throw new Error('Login request timeout. Please check your internet connection and try again.');
+        throw new Error('Login request timeout. Please check your connection and ensure your Supabase project is active.');
       }
       throw error;
     }
@@ -380,7 +408,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     // Test connection first
     const connectionOk = await testSupabaseConnection();
     if (!connectionOk) {
-      throw new Error(connectionError || 'Unable to connect to the authentication service. Please try again later.');
+      throw new Error(connectionError || 'Unable to connect to the authentication service. Your Supabase project may be paused.');
     }
 
     try {
@@ -408,8 +436,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       const { data, error } = await withTimeout(
         supabase.auth.signUp(signUpData),
-        60000,
-        'Registration request timeout - please check your connection'
+        15000,
+        'Registration request timeout'
       );
 
       if (error) {
@@ -438,7 +466,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     } catch (error: any) {
       console.error('Registration error:', error);
       if (error.message.includes('timeout')) {
-        throw new Error('Registration request timeout. Please check your internet connection and try again.');
+        throw new Error('Registration request timeout. Please check your connection and ensure your Supabase project is active.');
       }
       throw error;
     }
@@ -449,7 +477,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (isSupabaseConfigured) {
         await withTimeout(
           supabase.auth.signOut(),
-          60000,
+          10000,
           'Logout timeout'
         );
       }
@@ -490,7 +518,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       loading,
       validateToken,
       isSupabaseConfigured,
-      connectionError
+      connectionError,
+      retryConnection
     }}>
       {children}
     </AuthContext.Provider>
