@@ -11,7 +11,19 @@ if (!supabaseUrl || !supabaseAnonKey) {
   const mockClient = {
     auth: {
       getSession: () => Promise.resolve({ data: { session: null }, error: null }),
-      onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+      onAuthStateChange: (callback: any) => {
+        // Immediately call the callback with no session to prevent timeout
+        setTimeout(() => {
+          callback('SIGNED_OUT', null);
+        }, 0);
+        return { 
+          data: { 
+            subscription: { 
+              unsubscribe: () => {} 
+            } 
+          } 
+        };
+      },
       signInWithPassword: () => Promise.resolve({ data: { user: null }, error: { message: 'Supabase not configured' } }),
       signUp: () => Promise.resolve({ data: { user: null }, error: { message: 'Supabase not configured' } }),
       signOut: () => Promise.resolve({ error: null })
