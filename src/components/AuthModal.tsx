@@ -41,19 +41,16 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
         // Registration validation
         if (password !== confirmPassword) {
           setError('Passwords do not match');
-          setLoading(false);
           return;
         }
         if (password.length < 6) {
           setError('Password must be at least 6 characters');
-          setLoading(false);
           return;
         }
         
         // Validate token if provided
         if (token && !tokenValidated) {
           setError('Please enter a valid token or leave empty for regular access');
-          setLoading(false);
           return;
         }
       }
@@ -73,7 +70,10 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
       }
 
       if (success) {
-        onAuthSuccess();
+        // Add a small delay to allow auth state to update
+        setTimeout(() => {
+          onAuthSuccess();
+        }, 500);
       }
     } catch (err: any) {
       setError(err.message || 'An error occurred. Please try again.');
@@ -132,6 +132,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
             onChange={(e) => setEmail(e.target.value)}
             className="auth-input"
             required
+            disabled={loading}
           />
           
           <div className="relative">
@@ -142,11 +143,13 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
               onChange={(e) => setPassword(e.target.value)}
               className="auth-input pr-10"
               required
+              disabled={loading}
             />
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
               className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+              disabled={loading}
             >
               {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
             </button>
@@ -162,11 +165,13 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   className="auth-input pr-10"
                   required
+                  disabled={loading}
                 />
                 <button
                   type="button"
                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                   className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                  disabled={loading}
                 >
                   {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
@@ -184,6 +189,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
                   className={`auth-input ${
                     token ? (tokenValidated === true ? 'border-green-500' : tokenValidated === false ? 'border-red-500' : '') : ''
                   }`}
+                  disabled={loading}
                 />
                 {token && (
                   <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
@@ -231,6 +237,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
             type="button"
             onClick={toggleMode}
             className="interactive"
+            disabled={loading}
           >
             {isLogin ? 'Need an account? Register' : 'Have an account? Login'}
           </button>

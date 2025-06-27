@@ -242,7 +242,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
-      setLoading(true);
+      console.log('Starting login process for:', email);
       
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
@@ -251,32 +251,28 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (error) {
         console.error('Login error:', error.message);
-        setLoading(false);
         return false;
       }
 
       if (data.user) {
-        await loadUserProfile(data.user);
-        setLoading(false);
+        console.log('Login successful, user:', data.user.email);
+        // Don't manually load profile here - let the auth state change handler do it
         return true;
       }
 
-      setLoading(false);
       return false;
     } catch (error) {
       console.error('Login error:', error);
-      setLoading(false);
       return false;
     }
   };
 
   const register = async (email: string, password: string, token?: string): Promise<boolean> => {
     try {
-      setLoading(true);
+      console.log('Starting registration process for:', email);
       
       // Validate token if provided
       if (token && !(await validateToken(token))) {
-        setLoading(false);
         throw new Error('Invalid or expired token');
       }
 
@@ -298,38 +294,29 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (error) {
         console.error('Registration error:', error.message);
-        setLoading(false);
         return false;
       }
 
       if (data.user) {
-        // Wait a moment for triggers to execute, then load profile
-        setTimeout(async () => {
-          await loadUserProfile(data.user!);
-          setLoading(false);
-        }, 2000);
+        console.log('Registration successful, user:', data.user.email);
+        // Don't manually load profile here - let the auth state change handler do it
         return true;
       }
 
-      setLoading(false);
       return false;
     } catch (error) {
       console.error('Registration error:', error);
-      setLoading(false);
       return false;
     }
   };
 
   const logout = async () => {
     try {
-      setLoading(true);
       await supabase.auth.signOut();
       setUser(null);
       setUserProfile(null);
     } catch (error) {
       console.error('Logout error:', error);
-    } finally {
-      setLoading(false);
     }
   };
 
