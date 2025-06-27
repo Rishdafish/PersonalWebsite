@@ -236,7 +236,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
             <div className="error-message">
               {error}
               <div className="text-xs mt-1 text-gray-600">
-                Check the browser console for detailed error information.
+                Check the browser console (F12) for detailed error information.
               </div>
             </div>
           )}

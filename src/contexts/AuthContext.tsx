@@ -60,18 +60,32 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     let mounted = true;
     let loadingTimeout: NodeJS.Timeout;
 
-    // Set a maximum loading time of 10 seconds
+    // Set a maximum loading time of 8 seconds
     loadingTimeout = setTimeout(() => {
       if (mounted) {
         console.log('🚨 Auth loading timeout reached, setting loading to false');
         setLoading(false);
       }
-    }, 10000);
+    }, 8000);
 
     // Get initial session
     const getInitialSession = async () => {
       try {
         console.log('🔍 Getting initial session...');
+        
+        // Test Supabase connection first
+        const { data: testData, error: testError } = await supabase
+          .from('user_tokens')
+          .select('count')
+          .limit(1);
+        
+        if (testError) {
+          console.error('❌ Supabase connection test failed:', testError);
+          throw new Error('Database connection failed');
+        }
+        
+        console.log('✅ Supabase connection test passed');
+        
         const { data: { session }, error } = await supabase.auth.getSession();
         
         if (error) {
@@ -148,6 +162,26 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const loadUserProfile = async (authUser: SupabaseUser) => {
     try {
       console.log('👤 Loading profile for user:', authUser.email);
+      
+      // First check if user_profiles table exists and is accessible
+      const { data: tableCheck, error: tableError } = await supabase
+        .from('user_profiles')
+        .select('count')
+        .limit(1);
+      
+      if (tableError) {
+        console.error('❌ user_profiles table access error:', tableError);
+        // Create a fallback user if table doesn't exist
+        setUser({
+          id: authUser.id,
+          email: authUser.email || '',
+          role: 'regular',
+          isAdmin: false,
+          isSpecialized: false,
+          isRegular: true
+        });
+        return;
+      }
       
       const { data: profile, error } = await supabase
         .from('user_profiles')
@@ -332,14 +366,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const signUpData: any = {
         email,
         password,
+        options: {
+          emailRedirectTo: undefined // Disable email confirmation
+        }
       };
 
       // Add token to metadata if provided
       if (token) {
-        signUpData.options = {
-          data: {
-            token: token
-          }
+        signUpData.options.data = {
+          token: token
         };
         console.log('🎫 Token added to signup metadata');
       }
@@ -357,14 +392,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         console.log('📧 User ID:', data.user.id);
         console.log('📧 Email confirmation required:', !data.user.email_confirmed_at);
         
-        // Check if email confirmation is required
-        if (!data.user.email_confirmed_at) {
-          console.log('📧 Email confirmation required - user needs to check email');
-          // For now, we'll treat this as success since the user was created
-          // The auth state change handler will handle profile loading when they confirm
+        // If email confirmation is not required, the user should be signed in
+        if (data.user.email_confirmed_at || data.session) {
+          console.log('🎉 User is immediately available, no email confirmation needed');
+          return true;
+        } else {
+          console.log('📧 Email confirmation may be required');
+          return true; // Still consider it successful
         }
-        
-        return true;
       }
 
       console.log('⚠️ Registration returned no user');
