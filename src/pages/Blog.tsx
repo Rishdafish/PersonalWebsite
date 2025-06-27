@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Calendar, Clock, Plus } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import BlogModal, { BlogPostData } from '../components/BlogModal';
+import CommentSystem from '../components/CommentSystem';
 
 interface BlogPost {
   id: number;
@@ -240,18 +241,25 @@ The future belongs to developers who can effectively collaborate with AI tools t
                 </button>
               )}
 
-              {isAdmin && expandedPost === post.id && (
-                <div className="mt-4 pt-4 border-t border-gray-200">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setEditingPost(post);
-                      setShowBlogModal(true);
-                    }}
-                    className="text-sm bg-gray-100 hover:bg-gray-200 px-3 py-1 rounded transition-colors"
-                  >
-                    Edit Post
-                  </button>
+              {expandedPost === post.id && (
+                <div>
+                  {isAdmin && (
+                    <div className="mt-4 pt-4 border-t border-gray-200">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingPost(post);
+                          setShowBlogModal(true);
+                        }}
+                        className="text-sm bg-gray-100 hover:bg-gray-200 px-3 py-1 rounded transition-colors"
+                      >
+                        Edit Post
+                      </button>
+                    </div>
+                  )}
+                  
+                  {/* Comments Section */}
+                  <CommentSystem postId={post.id} />
                 </div>
               )}
             </article>

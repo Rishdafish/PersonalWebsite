@@ -31,9 +31,9 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
 
-  // Admin credentials
-  const ADMIN_EMAIL = 'admin@rishi.com';
-  const ADMIN_PASSWORD = 'admin123';
+  // Updated admin credentials
+  const ADMIN_EMAIL = 'rishabh.biry@gmail.com';
+  const ADMIN_PASSWORD = 'bIRYSMRS1210';
 
   useEffect(() => {
     // Check for stored user session
