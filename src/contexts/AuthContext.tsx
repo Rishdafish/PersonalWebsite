@@ -471,21 +471,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         terminalError('Error checking current session:', sessionCheckError);
       }
       
-      // Check database trigger status
-      terminalLog('========== DATABASE TRIGGER STATUS CHECK ==========');
-      try {
-        const { data: triggerCheck, error: triggerError } = await supabase
-          .rpc('check_trigger_status');
-        
-        if (triggerError) {
-          terminalLog('Could not check trigger status (function may not exist):', triggerError);
-        } else {
-          terminalLog('Trigger status check result:', triggerCheck);
-        }
-      } catch (triggerCheckError) {
-        terminalLog('Exception checking trigger status:', triggerCheckError);
-      }
-      
       // Perform the actual signup
       terminalLog('========== EXECUTING SUPABASE SIGNUP ==========');
       terminalLog('Calling supabase.auth.signUp with prepared data...');
