@@ -8,7 +8,7 @@ interface ProjectModalProps {
 }
 
 export interface ProjectData {
-  id?: string;
+  id?: number;
   title: string;
   startDate: string;
   description: string;
