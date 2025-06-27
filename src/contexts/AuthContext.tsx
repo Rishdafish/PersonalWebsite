@@ -152,7 +152,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.log('👤 Loading profile for user:', authUser.email);
       console.log('🆔 User ID:', authUser.id);
       
-      // Set a shorter timeout for profile loading
+      // Set a longer timeout for profile loading (increased from 2000 to 5000)
       const profilePromise = supabase
         .from('user_profiles')
         .select('*')
@@ -160,7 +160,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         .maybeSingle();
 
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Profile loading timeout')), 2000)
+        setTimeout(() => reject(new Error('Profile loading timeout')), 5000)
       );
 
       const { data: profile, error } = await Promise.race([
