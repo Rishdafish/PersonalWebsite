@@ -83,10 +83,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
 
     try {
-      // Simple health check with timeout
+      // Simple health check with increased timeout
       const { error } = await withTimeout(
         supabase.from('users').select('count').limit(1),
-        4000,
+        10000,
         'Connection timeout - please check your internet connection'
       );
 
@@ -234,14 +234,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return;
       }
 
-      // Check if user_profiles table exists and has data with timeout
+      // Check if user_profiles table exists and has data with increased timeout
       const { data: profile, error } = await withTimeout(
         supabase
           .from('user_profiles')
           .select('*')
           .eq('id', authUser.id)
           .maybeSingle(),
-        8000,
+        15000,
         'Profile loading timeout'
       );
 
