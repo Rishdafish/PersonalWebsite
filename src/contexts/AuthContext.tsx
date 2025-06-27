@@ -74,7 +74,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           return;
         }
 
-        const { data: { session }, error } = await supabase.auth.getSession();
+        // Add timeout to prevent hanging
+        const sessionPromise = supabase.auth.getSession();
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Session check timeout')), 10000);
+        });
+
+        const { data: { session }, error } = await Promise.race([sessionPromise, timeoutPromise]) as any;
         
         if (error) {
           console.error('Error getting session:', error);
@@ -103,32 +109,53 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     // Listen for auth changes only if Supabase is configured
     let subscription: any = null;
     if (isSupabaseConfigured) {
-      const { data } = supabase.auth.onAuthStateChange(
-        async (event, session) => {
-          if (mounted) {
-            if (session?.user) {
-              await loadUserProfile(session.user);
-            } else {
-              setUser(null);
-              setUserProfile(null);
+      try {
+        const { data } = supabase.auth.onAuthStateChange(
+          async (event, session) => {
+            if (mounted) {
+              try {
+                if (session?.user) {
+                  await loadUserProfile(session.user);
+                } else {
+                  setUser(null);
+                  setUserProfile(null);
+                }
+                setLoading(false);
+              } catch (error) {
+                console.error('Error in auth state change:', error);
+                setLoading(false);
+              }
             }
-            setLoading(false);
           }
+        );
+        subscription = data.subscription;
+      } catch (error) {
+        console.error('Error setting up auth listener:', error);
+        if (mounted) {
+          setLoading(false);
         }
-      );
-      subscription = data.subscription;
+      }
     }
 
     return () => {
       mounted = false;
       if (subscription) {
-        subscription.unsubscribe();
+        try {
+          subscription.unsubscribe();
+        } catch (error) {
+          console.error('Error unsubscribing from auth changes:', error);
+        }
       }
     };
   }, [isSupabaseConfigured]);
 
   const loadUserProfile = async (authUser: SupabaseUser) => {
     try {
+      if (!isSupabaseConfigured) {
+        createBasicUser(authUser);
+        return;
+      }
+
       // Check if user_profiles table exists and has data
       const { data: profile, error } = await supabase
         .from('user_profiles')
@@ -209,26 +236,45 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const login = async (email: string, password: string): Promise<boolean> => {
     if (!isSupabaseConfigured) {
-      throw new Error('Authentication service is not configured. Please contact the administrator.');
+      throw new Error('Authentication service is not configured. Please contact the administrator to set up the database connection.');
     }
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      // Add timeout to prevent hanging
+      const loginPromise = supabase.auth.signInWithPassword({
         email,
         password,
       });
+      
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Login request timeout - please check your connection')), 15000);
+      });
+
+      const { data, error } = await Promise.race([loginPromise, timeoutPromise]) as any;
 
       if (error) {
-        console.error('Login error:', error.message);
-        throw new Error(error.message);
+        console.error('Login error:', error);
+        
+        // Provide more specific error messages
+        if (error.message.includes('Invalid login credentials')) {
+          throw new Error('Invalid email or password. Please check your credentials and try again.');
+        } else if (error.message.includes('Email not confirmed')) {
+          throw new Error('Please check your email and confirm your account before logging in.');
+        } else if (error.message.includes('Too many requests')) {
+          throw new Error('Too many login attempts. Please wait a few minutes before trying again.');
+        } else if (error.message.includes('Supabase not configured')) {
+          throw new Error('Authentication service is not properly configured. Please contact the administrator.');
+        } else {
+          throw new Error(`Login failed: ${error.message}`);
+        }
       }
 
-      if (data.user) {
-        await loadUserProfile(data.user);
-        return true;
+      if (!data.user) {
+        throw new Error('Login failed - no user data received. Please try again.');
       }
 
-      throw new Error('Login failed - no user data received');
+      await loadUserProfile(data.user);
+      return true;
     } catch (error: any) {
       console.error('Login error:', error);
       throw error;
@@ -237,13 +283,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const register = async (email: string, password: string, token?: string): Promise<boolean> => {
     if (!isSupabaseConfigured) {
-      throw new Error('Authentication service is not configured. Please contact the administrator.');
+      throw new Error('Authentication service is not configured. Please contact the administrator to set up the database connection.');
     }
 
     try {
       // Validate token if provided
-      if (token && !(await validateToken(token))) {
-        throw new Error('Invalid or expired token');
+      if (token) {
+        const isValidToken = await validateToken(token);
+        if (!isValidToken) {
+          throw new Error('Invalid or expired access token. Please check the token and try again.');
+        }
       }
 
       const signUpData: any = {
@@ -260,20 +309,38 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         };
       }
 
-      const { data, error } = await supabase.auth.signUp(signUpData);
+      // Add timeout to prevent hanging
+      const registerPromise = supabase.auth.signUp(signUpData);
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Registration request timeout - please check your connection')), 15000);
+      });
+
+      const { data, error } = await Promise.race([registerPromise, timeoutPromise]) as any;
 
       if (error) {
-        console.error('Registration error:', error.message);
-        throw new Error(error.message);
+        console.error('Registration error:', error);
+        
+        // Provide more specific error messages
+        if (error.message.includes('User already registered')) {
+          throw new Error('An account with this email already exists. Please try logging in instead.');
+        } else if (error.message.includes('Password should be at least')) {
+          throw new Error('Password must be at least 6 characters long.');
+        } else if (error.message.includes('Invalid email')) {
+          throw new Error('Please enter a valid email address.');
+        } else if (error.message.includes('Supabase not configured')) {
+          throw new Error('Authentication service is not properly configured. Please contact the administrator.');
+        } else {
+          throw new Error(`Registration failed: ${error.message}`);
+        }
       }
 
-      if (data.user) {
-        // Create basic user immediately
-        createBasicUser(data.user);
-        return true;
+      if (!data.user) {
+        throw new Error('Registration failed - no user data received. Please try again.');
       }
 
-      throw new Error('Registration failed - no user data received');
+      // Create basic user immediately
+      createBasicUser(data.user);
+      return true;
     } catch (error: any) {
       console.error('Registration error:', error);
       throw error;
@@ -289,6 +356,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setUserProfile(null);
     } catch (error) {
       console.error('Logout error:', error);
+      // Still clear local state even if logout fails
+      setUser(null);
+      setUserProfile(null);
     }
   };
 

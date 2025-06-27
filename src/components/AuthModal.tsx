@@ -29,8 +29,13 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
       return;
     }
 
-    const isValid = await validateToken(tokenValue);
-    setTokenValidated(isValid);
+    try {
+      const isValid = await validateToken(tokenValue);
+      setTokenValidated(isValid);
+    } catch (error) {
+      console.error('Token validation error:', error);
+      setTokenValidated(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -41,28 +46,35 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
     try {
       // Check if Supabase is configured
       if (!isSupabaseConfigured) {
-        setError('Authentication service is not configured. Please contact the administrator.');
-        setLoading(false);
+        setError('Authentication service is not configured. Please contact the administrator to set up the database connection.');
+        return;
+      }
+
+      // Basic validation
+      if (!email.trim()) {
+        setError('Please enter your email address.');
+        return;
+      }
+
+      if (!password.trim()) {
+        setError('Please enter your password.');
         return;
       }
 
       if (!isLogin) {
         // Registration validation
         if (password !== confirmPassword) {
-          setError('Passwords do not match');
-          setLoading(false);
+          setError('Passwords do not match. Please check and try again.');
           return;
         }
         if (password.length < 6) {
-          setError('Password must be at least 6 characters');
-          setLoading(false);
+          setError('Password must be at least 6 characters long.');
           return;
         }
         
         // Validate token if provided
-        if (token && !tokenValidated) {
-          setError('Please enter a valid token or leave empty for regular access');
-          setLoading(false);
+        if (token && tokenValidated === false) {
+          setError('The access token you entered is invalid. Please check the token or leave it empty for regular access.');
           return;
         }
       }
@@ -70,17 +82,20 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
       let success = false;
       
       if (isLogin) {
-        success = await login(email, password);
+        success = await login(email.trim(), password);
       } else {
-        success = await register(email, password, token || undefined);
+        success = await register(email.trim(), password, token.trim() || undefined);
       }
 
       if (success) {
         onAuthSuccess();
         onClose();
+      } else {
+        setError('Authentication failed. Please try again.');
       }
     } catch (err: any) {
-      setError(err.message || 'An error occurred. Please try again.');
+      console.error('Authentication error:', err);
+      setError(err.message || 'An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -117,9 +132,19 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
         
         {!isSupabaseConfigured && (
           <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-red-800 text-sm">
-              ⚠️ Authentication service is not configured. Please contact the administrator to set up the database connection.
-            </p>
+            <div className="flex items-start space-x-3">
+              <div className="flex-shrink-0">
+                <svg className="w-5 h-5 text-red-400 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-sm font-medium text-red-800">Service Unavailable</h3>
+                <p className="text-red-700 text-sm mt-1">
+                  The authentication service is not configured. Please contact the administrator to set up the database connection.
+                </p>
+              </div>
+            </div>
           </div>
         )}
         
@@ -131,7 +156,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
             onChange={(e) => setEmail(e.target.value)}
             className="auth-input"
             required
-            disabled={!isSupabaseConfigured}
+            disabled={!isSupabaseConfigured || loading}
           />
           
           <input
@@ -141,7 +166,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
             onChange={(e) => setPassword(e.target.value)}
             className="auth-input"
             required
-            disabled={!isSupabaseConfigured}
+            disabled={!isSupabaseConfigured || loading}
           />
           
           {!isLogin && (
@@ -153,7 +178,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 className="auth-input"
                 required
-                disabled={!isSupabaseConfigured}
+                disabled={!isSupabaseConfigured || loading}
               />
               
               <div className="relative">
@@ -168,7 +193,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
                   className={`auth-input ${
                     token ? (tokenValidated === true ? 'border-green-500' : tokenValidated === false ? 'border-red-500' : '') : ''
                   }`}
-                  disabled={!isSupabaseConfigured}
+                  disabled={!isSupabaseConfigured || loading}
                 />
                 {token && isSupabaseConfigured && (
                   <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
@@ -200,14 +225,30 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
             </>
           )}
           
-          {error && <div className="error-message">{error}</div>}
+          {error && (
+            <div className="error-message bg-red-50 border border-red-200 rounded p-3">
+              <div className="flex items-start space-x-2">
+                <svg className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+                <span className="text-red-800 text-sm">{error}</span>
+              </div>
+            </div>
+          )}
           
           <button 
             type="submit" 
             className="auth-button interactive"
             disabled={loading || !isSupabaseConfigured}
           >
-            {loading ? 'Processing...' : (isLogin ? 'Login' : 'Create Account')}
+            {loading ? (
+              <div className="flex items-center justify-center space-x-2">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                <span>Processing...</span>
+              </div>
+            ) : (
+              isLogin ? 'Login' : 'Create Account'
+            )}
           </button>
         </form>
         
@@ -216,7 +257,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
             type="button"
             onClick={toggleMode}
             className="interactive"
-            disabled={!isSupabaseConfigured}
+            disabled={!isSupabaseConfigured || loading}
           >
             {isLogin ? 'Need an account? Register' : 'Have an account? Login'}
           </button>
