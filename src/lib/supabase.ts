@@ -7,21 +7,32 @@ console.log('🔧 Supabase Configuration Check:');
 console.log('URL:', supabaseUrl ? '✅ Present' : '❌ Missing');
 console.log('Anon Key:', supabaseAnonKey ? '✅ Present' : '❌ Missing');
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('❌ Missing Supabase environment variables');
+// Validate URL format
+let validUrl = supabaseUrl;
+let validKey = supabaseAnonKey;
+
+if (supabaseUrl && !supabaseUrl.startsWith('http')) {
+  console.error('❌ Invalid Supabase URL format. URL must start with http:// or https://');
+  validUrl = null;
+}
+
+if (!validUrl || !validKey) {
+  console.error('❌ Missing or invalid Supabase environment variables');
   console.error('Please check your .env file and ensure it contains:');
-  console.error('VITE_SUPABASE_URL=your_project_url');
+  console.error('VITE_SUPABASE_URL=https://your-project-id.supabase.co');
   console.error('VITE_SUPABASE_ANON_KEY=your_anon_key');
   
-  // Don't throw error in development, create a mock client
+  // Use mock values for development
   if (import.meta.env.DEV) {
-    console.warn('⚠️ Running in development mode without Supabase connection');
+    console.warn('⚠️ Running in development mode with mock Supabase connection');
+    validUrl = 'https://localhost:54321';
+    validKey = 'mock-anon-key';
   } else {
-    throw new Error('Missing Supabase environment variables');
+    throw new Error('Missing or invalid Supabase environment variables');
   }
 }
 
-export const supabase = createClient(supabaseUrl || 'http://localhost:54321', supabaseAnonKey || 'mock-key', {
+export const supabase = createClient(validUrl, validKey, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
@@ -33,7 +44,7 @@ export const supabase = createClient(supabaseUrl || 'http://localhost:54321', su
 console.log('✅ Supabase client initialized');
 
 // Test connection only if we have real credentials
-if (supabaseUrl && supabaseAnonKey && supabaseUrl !== 'http://localhost:54321') {
+if (validUrl && validKey && validUrl !== 'https://localhost:54321') {
   supabase.from('user_tokens').select('count').limit(1)
     .then(({ data, error }) => {
       if (error) {
