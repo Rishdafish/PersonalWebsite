@@ -53,10 +53,10 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
-// Helper function to handle promises with timeout - reduced timeout for faster feedback
+// Helper function to handle promises with timeout - increased timeout for better reliability
 const withTimeout = async <T>(
   promise: Promise<T>,
-  timeoutMs: number = 10000,
+  timeoutMs: number = 30000,
   errorMessage: string = 'Request timed out'
 ): Promise<T> => {
   const timeoutPromise = new Promise<never>((_, reject) => {
@@ -83,10 +83,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
 
     try {
-      // Use a simpler health check with reduced timeout
+      // Use a simpler health check with increased timeout
       const { error } = await withTimeout(
         supabase.auth.getSession(),
-        8000,
+        30000,
         'Connection timeout - please check your internet connection'
       );
 
@@ -131,7 +131,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           return;
         }
 
-        // Test connection first with reduced timeout
+        // Test connection first with increased timeout
         const connectionOk = await testSupabaseConnection();
         if (!connectionOk) {
           if (mounted) {
@@ -140,10 +140,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           return;
         }
 
-        // Get session with reduced timeout
+        // Get session with increased timeout
         const { data: { session }, error } = await withTimeout(
           supabase.auth.getSession(),
-          8000,
+          30000,
           'Session check timeout'
         );
         
@@ -231,14 +231,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return;
       }
 
-      // Check if user_profiles table exists and has data with reduced timeout
+      // Check if user_profiles table exists and has data with increased timeout
       const { data: profile, error } = await withTimeout(
         supabase
           .from('user_profiles')
           .select('*')
           .eq('id', authUser.id)
           .maybeSingle(),
-        8000,
+        30000,
         'Profile loading timeout'
       );
 
@@ -309,7 +309,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           .eq('token', token)
           .eq('is_active', true)
           .maybeSingle(),
-        8000,
+        30000,
         'Token validation timeout'
       );
 
@@ -337,7 +337,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           email,
           password,
         }),
-        10000,
+        30000,
         'Login request timeout - please check your connection'
       );
 
@@ -408,7 +408,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       const { data, error } = await withTimeout(
         supabase.auth.signUp(signUpData),
-        10000,
+        30000,
         'Registration request timeout - please check your connection'
       );
 
@@ -449,7 +449,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (isSupabaseConfigured) {
         await withTimeout(
           supabase.auth.signOut(),
-          8000,
+          30000,
           'Logout timeout'
         );
       }
