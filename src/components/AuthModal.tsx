@@ -16,7 +16,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
   const [loading, setLoading] = useState(false);
   const [tokenValidated, setTokenValidated] = useState<boolean | null>(null);
   
-  const { login, register, validateToken, isSupabaseConfigured } = useAuth();
+  const { login, register, validateToken, isSupabaseConfigured, connectionError } = useAuth();
 
   const handleTokenValidation = async (tokenValue: string) => {
     if (!tokenValue.trim()) {
@@ -47,6 +47,12 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
       // Check if Supabase is configured
       if (!isSupabaseConfigured) {
         setError('Authentication service is not configured. Please contact the administrator to set up the database connection.');
+        return;
+      }
+
+      // Check for connection errors
+      if (connectionError) {
+        setError(connectionError);
         return;
       }
 
@@ -121,6 +127,10 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
     resetForm();
   };
 
+  // Show connection error if present
+  const displayError = error || connectionError;
+  const isDisabled = loading || !isSupabaseConfigured || !!connectionError;
+
   return (
     <div className="auth-modal" onClick={handleOverlayClick}>
       <div className="auth-modal-content">
@@ -130,7 +140,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
         
         <h2>{isLogin ? 'Login' : 'Create Account'}</h2>
         
-        {!isSupabaseConfigured && (
+        {(!isSupabaseConfigured || connectionError) && (
           <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
             <div className="flex items-start space-x-3">
               <div className="flex-shrink-0">
@@ -141,7 +151,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
               <div>
                 <h3 className="text-sm font-medium text-red-800">Service Unavailable</h3>
                 <p className="text-red-700 text-sm mt-1">
-                  The authentication service is not configured. Please contact the administrator to set up the database connection.
+                  {connectionError || 'The authentication service is not configured. Please contact the administrator to set up the database connection.'}
                 </p>
               </div>
             </div>
@@ -156,7 +166,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
             onChange={(e) => setEmail(e.target.value)}
             className="auth-input"
             required
-            disabled={!isSupabaseConfigured || loading}
+            disabled={isDisabled}
           />
           
           <input
@@ -166,7 +176,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
             onChange={(e) => setPassword(e.target.value)}
             className="auth-input"
             required
-            disabled={!isSupabaseConfigured || loading}
+            disabled={isDisabled}
           />
           
           {!isLogin && (
@@ -178,7 +188,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 className="auth-input"
                 required
-                disabled={!isSupabaseConfigured || loading}
+                disabled={isDisabled}
               />
               
               <div className="relative">
@@ -193,9 +203,9 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
                   className={`auth-input ${
                     token ? (tokenValidated === true ? 'border-green-500' : tokenValidated === false ? 'border-red-500' : '') : ''
                   }`}
-                  disabled={!isSupabaseConfigured || loading}
+                  disabled={isDisabled}
                 />
-                {token && isSupabaseConfigured && (
+                {token && isSupabaseConfigured && !connectionError && (
                   <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
                     {tokenValidated === true && (
                       <div className="w-4 h-4 bg-green-500 rounded-full flex items-center justify-center">
@@ -225,13 +235,13 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
             </>
           )}
           
-          {error && (
+          {displayError && (
             <div className="error-message bg-red-50 border border-red-200 rounded p-3">
               <div className="flex items-start space-x-2">
                 <svg className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                 </svg>
-                <span className="text-red-800 text-sm">{error}</span>
+                <span className="text-red-800 text-sm">{displayError}</span>
               </div>
             </div>
           )}
@@ -239,7 +249,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
           <button 
             type="submit" 
             className="auth-button interactive"
-            disabled={loading || !isSupabaseConfigured}
+            disabled={isDisabled}
           >
             {loading ? (
               <div className="flex items-center justify-center space-x-2">
@@ -257,7 +267,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
             type="button"
             onClick={toggleMode}
             className="interactive"
-            disabled={!isSupabaseConfigured || loading}
+            disabled={isDisabled}
           >
             {isLogin ? 'Need an account? Register' : 'Have an account? Login'}
           </button>

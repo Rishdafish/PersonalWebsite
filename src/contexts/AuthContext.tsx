@@ -36,6 +36,7 @@ interface AuthContextType {
   loading: boolean;
   validateToken: (token: string) => Promise<boolean>;
   isSupabaseConfigured: boolean;
+  connectionError: string | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -56,9 +57,59 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
 
   // Check if Supabase is properly configured
   const isSupabaseConfigured = !!(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY);
+
+  // Test Supabase connection
+  const testSupabaseConnection = async (): Promise<boolean> => {
+    if (!isSupabaseConfigured) {
+      setConnectionError('Supabase environment variables are not configured');
+      return false;
+    }
+
+    try {
+      // Simple health check with shorter timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+      const { error } = await supabase
+        .from('users')
+        .select('count')
+        .limit(1)
+        .abortSignal(controller.signal);
+
+      clearTimeout(timeoutId);
+
+      if (error && error.message.includes('relation "public.users" does not exist')) {
+        setConnectionError('Database tables are not set up. Please contact the administrator.');
+        return false;
+      }
+
+      if (error && (error.message.includes('Invalid API key') || error.message.includes('JWT'))) {
+        setConnectionError('Invalid Supabase configuration. Please contact the administrator.');
+        return false;
+      }
+
+      if (error) {
+        console.warn('Supabase connection test failed:', error);
+        setConnectionError('Unable to connect to the database. Please try again later.');
+        return false;
+      }
+
+      setConnectionError(null);
+      return true;
+    } catch (error: any) {
+      console.error('Supabase connection test error:', error);
+      if (error.name === 'AbortError') {
+        setConnectionError('Connection timeout. Please check your internet connection.');
+      } else {
+        setConnectionError('Unable to connect to the database. Please try again later.');
+      }
+      return false;
+    }
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -68,22 +119,33 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       try {
         if (!isSupabaseConfigured) {
           console.warn('Supabase environment variables not configured');
+          setConnectionError('Authentication service is not configured');
           if (mounted) {
             setLoading(false);
           }
           return;
         }
 
-        // Increased timeout to 30 seconds to prevent timeout errors
-        const sessionPromise = supabase.auth.getSession();
-        const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('Session check timeout')), 30000);
-        });
+        // Test connection first
+        const connectionOk = await testSupabaseConnection();
+        if (!connectionOk) {
+          if (mounted) {
+            setLoading(false);
+          }
+          return;
+        }
 
-        const { data: { session }, error } = await Promise.race([sessionPromise, timeoutPromise]) as any;
+        // Get session with shorter timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        clearTimeout(timeoutId);
         
         if (error) {
           console.error('Error getting session:', error);
+          setConnectionError('Failed to retrieve session. Please try logging in again.');
           if (mounted) {
             setLoading(false);
           }
@@ -94,10 +156,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           if (session?.user) {
             await loadUserProfile(session.user);
           }
+          setConnectionError(null);
           setLoading(false);
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error getting initial session:', error);
+        if (error.name === 'AbortError') {
+          setConnectionError('Connection timeout. Please check your internet connection and try again.');
+        } else {
+          setConnectionError('Failed to initialize authentication. Please refresh the page.');
+        }
         if (mounted) {
           setLoading(false);
         }
@@ -120,9 +188,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                   setUser(null);
                   setUserProfile(null);
                 }
+                setConnectionError(null);
                 setLoading(false);
               } catch (error) {
                 console.error('Error in auth state change:', error);
+                setConnectionError('Authentication state error. Please try logging in again.');
                 setLoading(false);
               }
             }
@@ -131,6 +201,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         subscription = data.subscription;
       } catch (error) {
         console.error('Error setting up auth listener:', error);
+        setConnectionError('Failed to set up authentication listener.');
         if (mounted) {
           setLoading(false);
         }
@@ -156,12 +227,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return;
       }
 
-      // Check if user_profiles table exists and has data
+      // Check if user_profiles table exists and has data with timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+
       const { data: profile, error } = await supabase
         .from('user_profiles')
         .select('*')
         .eq('id', authUser.id)
+        .abortSignal(controller.signal)
         .maybeSingle();
+
+      clearTimeout(timeoutId);
 
       if (error && error.code !== 'PGRST116') {
         console.error('Error loading user profile:', error);
@@ -184,8 +261,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         // Create basic user if no profile exists
         createBasicUser(authUser);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading user profile:', error);
+      if (error.name === 'AbortError') {
+        console.warn('Profile loading timeout, using basic user info');
+      }
       createBasicUser(authUser);
     }
   };
@@ -220,15 +300,21 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
 
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+
       const { data, error } = await supabase
         .from('user_tokens')
         .select('*')
         .eq('token', token)
         .eq('is_active', true)
+        .abortSignal(controller.signal)
         .maybeSingle();
 
+      clearTimeout(timeoutId);
+
       return !error && !!data;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error validating token:', error);
       return false;
     }
@@ -239,18 +325,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       throw new Error('Authentication service is not configured. Please contact the administrator to set up the database connection.');
     }
 
+    // Test connection first
+    const connectionOk = await testSupabaseConnection();
+    if (!connectionOk) {
+      throw new Error(connectionError || 'Unable to connect to the authentication service. Please try again later.');
+    }
+
     try {
-      // Add timeout to prevent hanging
-      const loginPromise = supabase.auth.signInWithPassword({
+      // Add timeout with AbortController
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
-      
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Login request timeout - please check your connection')), 15000);
-      });
 
-      const { data, error } = await Promise.race([loginPromise, timeoutPromise]) as any;
+      clearTimeout(timeoutId);
 
       if (error) {
         console.error('Login error:', error);
@@ -274,9 +365,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
 
       await loadUserProfile(data.user);
+      setConnectionError(null);
       return true;
     } catch (error: any) {
       console.error('Login error:', error);
+      if (error.name === 'AbortError') {
+        throw new Error('Login request timeout. Please check your internet connection and try again.');
+      }
       throw error;
     }
   };
@@ -284,6 +379,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const register = async (email: string, password: string, token?: string): Promise<boolean> => {
     if (!isSupabaseConfigured) {
       throw new Error('Authentication service is not configured. Please contact the administrator to set up the database connection.');
+    }
+
+    // Test connection first
+    const connectionOk = await testSupabaseConnection();
+    if (!connectionOk) {
+      throw new Error(connectionError || 'Unable to connect to the authentication service. Please try again later.');
     }
 
     try {
@@ -309,13 +410,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         };
       }
 
-      // Add timeout to prevent hanging
-      const registerPromise = supabase.auth.signUp(signUpData);
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Registration request timeout - please check your connection')), 15000);
-      });
+      // Add timeout with AbortController
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-      const { data, error } = await Promise.race([registerPromise, timeoutPromise]) as any;
+      const { data, error } = await supabase.auth.signUp(signUpData);
+
+      clearTimeout(timeoutId);
 
       if (error) {
         console.error('Registration error:', error);
@@ -340,9 +441,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       // Create basic user immediately
       createBasicUser(data.user);
+      setConnectionError(null);
       return true;
     } catch (error: any) {
       console.error('Registration error:', error);
+      if (error.name === 'AbortError') {
+        throw new Error('Registration request timeout. Please check your internet connection and try again.');
+      }
       throw error;
     }
   };
@@ -350,11 +455,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const logout = async () => {
     try {
       if (isSupabaseConfigured) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        
         await supabase.auth.signOut();
+        clearTimeout(timeoutId);
       }
       setUser(null);
       setUserProfile(null);
-    } catch (error) {
+      setConnectionError(null);
+    } catch (error: any) {
       console.error('Logout error:', error);
       // Still clear local state even if logout fails
       setUser(null);
@@ -387,7 +497,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       canEditContent,
       loading,
       validateToken,
-      isSupabaseConfigured
+      isSupabaseConfigured,
+      connectionError
     }}>
       {children}
     </AuthContext.Provider>
