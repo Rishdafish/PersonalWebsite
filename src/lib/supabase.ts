@@ -4,10 +4,30 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables');
+  console.error('Missing Supabase environment variables');
+  // Create a mock client to prevent crashes
+  const mockClient = {
+    auth: {
+      getSession: () => Promise.resolve({ data: { session: null }, error: null }),
+      onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+      signInWithPassword: () => Promise.resolve({ data: { user: null }, error: { message: 'Supabase not configured' } }),
+      signUp: () => Promise.resolve({ data: { user: null }, error: { message: 'Supabase not configured' } }),
+      signOut: () => Promise.resolve({ error: null })
+    },
+    from: () => ({
+      select: () => ({ eq: () => ({ maybeSingle: () => Promise.resolve({ data: null, error: null }) }) }),
+      insert: () => ({ select: () => ({ single: () => Promise.resolve({ data: null, error: null }) }) }),
+      update: () => ({ eq: () => ({ select: () => ({ single: () => Promise.resolve({ data: null, error: null }) }) }) }),
+      delete: () => ({ eq: () => Promise.resolve({ error: null }) }),
+      upsert: () => Promise.resolve({ error: null })
+    })
+  };
+  
+  // @ts-ignore
+  export const supabase = mockClient;
+} else {
+  export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 }
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // Database types
 export interface UserStatistics {
@@ -82,152 +102,202 @@ export interface Project {
 // API functions for blog posts
 export const blogAPI = {
   async getAll(userId?: string) {
-    let query = supabase
-      .from('blog_posts')
-      .select('*')
-      .order('created_at', { ascending: false });
-    
-    if (userId) {
-      query = query.eq('user_id', userId);
-    } else {
-      query = query.eq('published', true);
+    try {
+      let query = supabase
+        .from('blog_posts')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (userId) {
+        query = query.eq('user_id', userId);
+      } else {
+        query = query.eq('published', true);
+      }
+      
+      const { data, error } = await query;
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error in blogAPI.getAll:', error);
+      return [];
     }
-    
-    const { data, error } = await query;
-    if (error) throw error;
-    return data;
   },
 
   async create(post: Omit<BlogPost, 'id' | 'created_at' | 'updated_at'>) {
-    const { data, error } = await supabase
-      .from('blog_posts')
-      .insert([post])
-      .select()
-      .single();
-    
-    if (error) throw error;
-    return data;
+    try {
+      const { data, error } = await supabase
+        .from('blog_posts')
+        .insert([post])
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error in blogAPI.create:', error);
+      throw error;
+    }
   },
 
   async update(id: string, updates: Partial<BlogPost>) {
-    const { data, error } = await supabase
-      .from('blog_posts')
-      .update(updates)
-      .eq('id', id)
-      .select()
-      .single();
-    
-    if (error) throw error;
-    return data;
+    try {
+      const { data, error } = await supabase
+        .from('blog_posts')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error in blogAPI.update:', error);
+      throw error;
+    }
   },
 
   async delete(id: string) {
-    const { error } = await supabase
-      .from('blog_posts')
-      .delete()
-      .eq('id', id);
-    
-    if (error) throw error;
+    try {
+      const { error } = await supabase
+        .from('blog_posts')
+        .delete()
+        .eq('id', id);
+      
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error in blogAPI.delete:', error);
+      throw error;
+    }
   }
 };
 
 // API functions for projects
 export const projectsAPI = {
   async getAll(userId?: string) {
-    let query = supabase
-      .from('projects')
-      .select('*')
-      .order('created_at', { ascending: false });
-    
-    if (userId) {
-      query = query.eq('user_id', userId);
+    try {
+      let query = supabase
+        .from('projects')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (userId) {
+        query = query.eq('user_id', userId);
+      }
+      
+      const { data, error } = await query;
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error in projectsAPI.getAll:', error);
+      return [];
     }
-    
-    const { data, error } = await query;
-    if (error) throw error;
-    return data;
   },
 
   async create(project: Omit<Project, 'id' | 'created_at' | 'updated_at'>) {
-    const { data, error } = await supabase
-      .from('projects')
-      .insert([project])
-      .select()
-      .single();
-    
-    if (error) throw error;
-    return data;
+    try {
+      const { data, error } = await supabase
+        .from('projects')
+        .insert([project])
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error in projectsAPI.create:', error);
+      throw error;
+    }
   },
 
   async update(id: string, updates: Partial<Project>) {
-    const { data, error } = await supabase
-      .from('projects')
-      .update(updates)
-      .eq('id', id)
-      .select()
-      .single();
-    
-    if (error) throw error;
-    return data;
+    try {
+      const { data, error } = await supabase
+        .from('projects')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error in projectsAPI.update:', error);
+      throw error;
+    }
   },
 
   async delete(id: string) {
-    const { error } = await supabase
-      .from('projects')
-      .delete()
-      .eq('id', id);
-    
-    if (error) throw error;
+    try {
+      const { error } = await supabase
+        .from('projects')
+        .delete()
+        .eq('id', id);
+      
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error in projectsAPI.delete:', error);
+      throw error;
+    }
   }
 };
 
 // API functions for work entries with annual data
 export const workEntriesAPI = {
   async getAnnualData(userId: string, year?: number) {
-    const targetYear = year || new Date().getFullYear();
-    const startDate = `${targetYear}-01-01`;
-    const endDate = `${targetYear}-12-31`;
-    
-    const { data, error } = await supabase
-      .from('work_entries')
-      .select(`
-        *,
-        subjects (
-          id,
-          name,
-          icon
-        )
-      `)
-      .eq('user_id', userId)
-      .gte('entry_date', startDate)
-      .lte('entry_date', endDate)
-      .order('entry_date', { ascending: true });
-    
-    if (error) throw error;
-    return data;
+    try {
+      const targetYear = year || new Date().getFullYear();
+      const startDate = `${targetYear}-01-01`;
+      const endDate = `${targetYear}-12-31`;
+      
+      const { data, error } = await supabase
+        .from('work_entries')
+        .select(`
+          *,
+          subjects (
+            id,
+            name,
+            icon
+          )
+        `)
+        .eq('user_id', userId)
+        .gte('entry_date', startDate)
+        .lte('entry_date', endDate)
+        .order('entry_date', { ascending: true });
+      
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error in workEntriesAPI.getAnnualData:', error);
+      return [];
+    }
   },
 
   async getDailyTotals(userId: string, year?: number) {
-    const targetYear = year || new Date().getFullYear();
-    const startDate = `${targetYear}-01-01`;
-    const endDate = `${targetYear}-12-31`;
-    
-    const { data, error } = await supabase
-      .from('work_entries')
-      .select('entry_date, hours')
-      .eq('user_id', userId)
-      .gte('entry_date', startDate)
-      .lte('entry_date', endDate);
-    
-    if (error) throw error;
-    
-    // Group by date and sum hours
-    const dailyTotals = data.reduce((acc, entry) => {
-      const date = entry.entry_date;
-      acc[date] = (acc[date] || 0) + entry.hours;
-      return acc;
-    }, {} as Record<string, number>);
-    
-    return dailyTotals;
+    try {
+      const targetYear = year || new Date().getFullYear();
+      const startDate = `${targetYear}-01-01`;
+      const endDate = `${targetYear}-12-31`;
+      
+      const { data, error } = await supabase
+        .from('work_entries')
+        .select('entry_date, hours')
+        .eq('user_id', userId)
+        .gte('entry_date', startDate)
+        .lte('entry_date', endDate);
+      
+      if (error) throw error;
+      
+      // Group by date and sum hours
+      const dailyTotals = (data || []).reduce((acc, entry) => {
+        const date = entry.entry_date;
+        acc[date] = (acc[date] || 0) + entry.hours;
+        return acc;
+      }, {} as Record<string, number>);
+      
+      return dailyTotals;
+    } catch (error) {
+      console.error('Error in workEntriesAPI.getDailyTotals:', error);
+      return {};
+    }
   }
 };

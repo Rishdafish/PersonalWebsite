@@ -57,17 +57,30 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Get initial session
+    let mounted = true;
+
+    // Get initial session with timeout
     const getInitialSession = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
-          await loadUserProfile(session.user);
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Session check timeout')), 10000)
+        );
+
+        const sessionPromise = supabase.auth.getSession();
+        
+        const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]) as any;
+        
+        if (mounted) {
+          if (session?.user) {
+            await loadUserProfile(session.user);
+          }
+          setLoading(false);
         }
       } catch (error) {
         console.error('Error getting initial session:', error);
-      } finally {
-        setLoading(false);
+        if (mounted) {
+          setLoading(false);
+        }
       }
     };
 
@@ -76,29 +89,37 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        if (session?.user) {
-          await loadUserProfile(session.user);
-        } else {
-          setUser(null);
-          setUserProfile(null);
+        if (mounted) {
+          if (session?.user) {
+            await loadUserProfile(session.user);
+          } else {
+            setUser(null);
+            setUserProfile(null);
+          }
+          setLoading(false);
         }
-        setLoading(false);
       }
     );
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const loadUserProfile = async (authUser: SupabaseUser) => {
     try {
+      // Check if user_profiles table exists and has data
       const { data: profile, error } = await supabase
         .from('user_profiles')
         .select('*')
         .eq('id', authUser.id)
-        .single();
+        .maybeSingle();
 
-      if (error) {
+      if (error && error.code !== 'PGRST116') {
         console.error('Error loading user profile:', error);
+        // Fall back to basic user info
+        createBasicUser(authUser);
         return;
       }
 
@@ -112,10 +133,38 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           isSpecialized: profile.role === 'specialized',
           isRegular: profile.role === 'regular'
         });
+      } else {
+        // Create basic user if no profile exists
+        createBasicUser(authUser);
       }
     } catch (error) {
       console.error('Error loading user profile:', error);
+      createBasicUser(authUser);
     }
+  };
+
+  const createBasicUser = (authUser: SupabaseUser) => {
+    // Determine role based on email
+    const adminEmails = ['rishabh.biry@gmail.com', 'biryrishabh01@gmail.com', 'biryrishabh@gmail.com'];
+    const role = adminEmails.includes(authUser.email || '') ? 'admin' : 'regular';
+
+    const basicProfile: UserProfile = {
+      id: authUser.id,
+      email: authUser.email || '',
+      role,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    setUserProfile(basicProfile);
+    setUser({
+      id: authUser.id,
+      email: authUser.email || '',
+      role,
+      isAdmin: role === 'admin',
+      isSpecialized: role === 'specialized',
+      isRegular: role === 'regular'
+    });
   };
 
   const validateToken = async (token: string): Promise<boolean> => {
@@ -125,7 +174,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         .select('*')
         .eq('token', token)
         .eq('is_active', true)
-        .single();
+        .maybeSingle();
 
       return !error && !!data;
     } catch (error) {
@@ -187,11 +236,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
 
       if (data.user) {
-        // User profile will be created automatically by the trigger
-        // Load the profile after a short delay to ensure trigger has executed
-        setTimeout(async () => {
-          await loadUserProfile(data.user!);
-        }, 1000);
+        // Create basic user immediately
+        createBasicUser(data.user);
         return true;
       }
 
@@ -220,18 +266,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const hasHoursAccess = isAdmin || isSpecialized;
   const canComment = isAdmin || isSpecialized;
   const canEditContent = isAdmin;
-
-  // Don't render children until we've checked the initial session
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <AuthContext.Provider value={{
