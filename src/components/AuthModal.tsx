@@ -79,6 +79,8 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
 
       if (success) {
         console.log('🎉 Auth successful, calling onAuthSuccess');
+        // Reset form state
+        resetForm();
         // Close modal immediately on success
         onAuthSuccess();
       }
@@ -93,6 +95,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
 
   const handleOverlayClick = (e: React.MouseEvent) => {
     if (e.target === e.currentTarget) {
+      resetForm();
       onClose();
     }
   };
@@ -106,6 +109,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
     setTokenValidated(null);
     setShowPassword(false);
     setShowConfirmPassword(false);
+    setLoading(false);
   };
 
   const toggleMode = () => {
@@ -113,10 +117,15 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
     resetForm();
   };
 
+  const handleClose = () => {
+    resetForm();
+    onClose();
+  };
+
   return (
     <div className="auth-modal" onClick={handleOverlayClick}>
       <div className="auth-modal-content">
-        <button className="close-button interactive" onClick={onClose}>
+        <button className="close-button interactive" onClick={handleClose} disabled={loading}>
           ×
         </button>
         

@@ -60,13 +60,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     let mounted = true;
     let loadingTimeout: NodeJS.Timeout;
 
-    // Set a maximum loading time
+    // Set a maximum loading time to prevent infinite loading
     loadingTimeout = setTimeout(() => {
       if (mounted) {
         console.log('🚨 Auth loading timeout reached, setting loading to false');
         setLoading(false);
       }
-    }, 5000); // Increased to 5 seconds for better reliability
+    }, 3000); // 3 second timeout for better UX
 
     // Get initial session
     const getInitialSession = async () => {
@@ -117,6 +117,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
         console.log('🔄 Auth state changed:', event, session?.user?.email || 'no user');
 
+        // Clear loading timeout when auth state changes
+        clearTimeout(loadingTimeout);
+
         if (event === 'SIGNED_OUT' || !session?.user) {
           console.log('👋 User signed out or no user');
           setUser(null);
@@ -145,24 +148,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, []);
 
   const loadUserProfile = async (authUser: SupabaseUser) => {
-    const profileTimeout = setTimeout(() => {
-      console.log('⏰ Profile loading timeout, creating fallback user');
-      createFallbackUser(authUser);
-    }, 3000); // Increased timeout
-
     try {
       console.log('👤 Loading profile for user:', authUser.email);
       console.log('🆔 User ID:', authUser.id);
       
-      console.log('📋 Querying user_profiles table...');
-      
-      const { data: profile, error } = await supabase
+      // Set a shorter timeout for profile loading
+      const profilePromise = supabase
         .from('user_profiles')
         .select('*')
         .eq('id', authUser.id)
         .maybeSingle();
 
-      clearTimeout(profileTimeout);
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Profile loading timeout')), 2000)
+      );
+
+      const { data: profile, error } = await Promise.race([
+        profilePromise,
+        timeoutPromise
+      ]) as any;
 
       if (error) {
         console.error('❌ Error loading user profile:', error);
@@ -191,7 +195,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         createFallbackUser(authUser);
       }
     } catch (error) {
-      clearTimeout(profileTimeout);
       console.error('❌ Error in loadUserProfile:', error);
       createFallbackUser(authUser);
     }
@@ -286,6 +289,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (data.user) {
         console.log('✅ Login successful, user:', data.user.email);
+        // Don't manually load profile here - let the auth state change handler do it
         return true;
       }
 
@@ -338,6 +342,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (data.user) {
         console.log('✅ Registration successful, user:', data.user.email);
+        // Don't manually load profile here - let the auth state change handler do it
         return true;
       }
 
@@ -353,7 +358,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       console.log('👋 Starting logout process...');
       
-      // Clear local state immediately
+      // Clear local state immediately for better UX
       setUser(null);
       setUserProfile(null);
       

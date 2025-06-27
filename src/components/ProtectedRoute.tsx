@@ -24,7 +24,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     const timeout = setTimeout(() => {
       console.log('🚨 ProtectedRoute loading timeout, forcing render');
       setLocalLoading(false);
-    }, 3000); // 3 second timeout
+    }, 2000); // Reduced to 2 seconds for better UX
 
     if (!loading) {
       clearTimeout(timeout);
@@ -35,7 +35,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   }, [loading]);
 
   // Show loading while checking authentication
-  if (loading || localLoading) {
+  if (loading && localLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
         <div className="text-center">

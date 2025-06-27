@@ -41,6 +41,8 @@ const Header: React.FC = () => {
         window.location.href = '/';
       } catch (error) {
         console.error('❌ Logout failed:', error);
+        // Even if logout fails, redirect to home
+        window.location.href = '/';
       }
     } else {
       console.log('🔐 Opening auth modal for login');
@@ -51,6 +53,10 @@ const Header: React.FC = () => {
   const handleAuthSuccess = () => {
     console.log('🎉 Auth success, closing modal');
     setShowAuthModal(false);
+    // Small delay to ensure auth state is updated
+    setTimeout(() => {
+      console.log('🔄 Auth success complete');
+    }, 100);
   };
 
   const getRoleIcon = () => {
