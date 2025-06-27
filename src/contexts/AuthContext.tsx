@@ -56,7 +56,7 @@ interface AuthProviderProps {
 // Helper function to handle promises with timeout
 const withTimeout = async <T>(
   promise: Promise<T>,
-  timeoutMs: number = 5000,
+  timeoutMs: number = 15000,
   errorMessage: string = 'Request timed out'
 ): Promise<T> => {
   const timeoutPromise = new Promise<never>((_, reject) => {
@@ -86,7 +86,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Use a simpler health check that doesn't require specific tables
       const { error } = await withTimeout(
         supabase.auth.getSession(),
-        8000,
+        20000,
         'Connection timeout - please check your internet connection'
       );
 
@@ -143,7 +143,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         // Get session with timeout
         const { data: { session }, error } = await withTimeout(
           supabase.auth.getSession(),
-          6000,
+          15000,
           'Session check timeout'
         );
         
@@ -238,7 +238,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           .select('*')
           .eq('id', authUser.id)
           .maybeSingle(),
-        10000,
+        20000,
         'Profile loading timeout'
       );
 
@@ -309,7 +309,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           .eq('token', token)
           .eq('is_active', true)
           .maybeSingle(),
-        5000,
+        10000,
         'Token validation timeout'
       );
 
@@ -337,7 +337,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           email,
           password,
         }),
-        8000,
+        15000,
         'Login request timeout - please check your connection'
       );
 
@@ -408,7 +408,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       const { data, error } = await withTimeout(
         supabase.auth.signUp(signUpData),
-        8000,
+        15000,
         'Registration request timeout - please check your connection'
       );
 
@@ -449,7 +449,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (isSupabaseConfigured) {
         await withTimeout(
           supabase.auth.signOut(),
-          5000,
+          10000,
           'Logout timeout'
         );
       }
