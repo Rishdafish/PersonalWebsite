@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 
 interface User {
+  id: string;
   email: string;
   isAdmin: boolean;
 }
@@ -34,19 +35,26 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // Updated admin credentials
   const ADMIN_EMAIL = 'rishabh.biry@gmail.com';
   const ADMIN_PASSWORD = 'bIRYSMRS1210';
+  const ADMIN_ID = 'admin-user-id-12345'; // Fixed admin ID
 
   useEffect(() => {
     // Check for stored user session
     const storedUser = localStorage.getItem('user');
     if (storedUser) {
-      setUser(JSON.parse(storedUser));
+      const parsedUser = JSON.parse(storedUser);
+      // Ensure the stored user has an ID
+      if (!parsedUser.id) {
+        parsedUser.id = parsedUser.email === ADMIN_EMAIL ? ADMIN_ID : crypto.randomUUID();
+        localStorage.setItem('user', JSON.stringify(parsedUser));
+      }
+      setUser(parsedUser);
     }
   }, []);
 
   const login = async (email: string, password: string): Promise<boolean> => {
     // Check admin credentials
     if (email === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
-      const adminUser = { email, isAdmin: true };
+      const adminUser = { id: ADMIN_ID, email, isAdmin: true };
       setUser(adminUser);
       localStorage.setItem('user', JSON.stringify(adminUser));
       return true;
@@ -57,7 +65,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const foundUser = users.find((u: any) => u.email === email && u.password === password);
     
     if (foundUser) {
-      const userData = { email, isAdmin: false };
+      // Ensure user has an ID
+      if (!foundUser.id) {
+        foundUser.id = crypto.randomUUID();
+        // Update the stored users array with the new ID
+        const updatedUsers = users.map((u: any) => 
+          u.email === email ? foundUser : u
+        );
+        localStorage.setItem('users', JSON.stringify(updatedUsers));
+      }
+      
+      const userData = { id: foundUser.id, email, isAdmin: false };
       setUser(userData);
       localStorage.setItem('user', JSON.stringify(userData));
       return true;
@@ -79,11 +97,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       return false;
     }
 
-    // Add new user
-    users.push({ email, password });
+    // Generate a unique ID for the new user
+    const userId = crypto.randomUUID();
+
+    // Add new user with ID
+    users.push({ id: userId, email, password });
     localStorage.setItem('users', JSON.stringify(users));
 
-    const userData = { email, isAdmin: false };
+    const userData = { id: userId, email, isAdmin: false };
     setUser(userData);
     localStorage.setItem('user', JSON.stringify(userData));
     return true;
