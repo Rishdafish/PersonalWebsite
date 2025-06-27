@@ -32,10 +32,10 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
 
-  // Updated admin credentials
+  // Updated admin credentials with valid UUID
   const ADMIN_EMAIL = 'rishabh.biry@gmail.com';
   const ADMIN_PASSWORD = 'bIRYSMRS1210';
-  const ADMIN_ID = 'admin-user-id-12345'; // Fixed admin ID
+  const ADMIN_ID = 'a1b2c3d4-e5f6-4789-1234-567890abcdef'; // Valid UUID format
 
   useEffect(() => {
     // Check for stored user session
