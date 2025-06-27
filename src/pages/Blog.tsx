@@ -62,14 +62,28 @@ const Blog: React.FC = () => {
         content: postData.content
       });
       
-      setPosts(posts.map(post => 
-        post.id === editingPost.id ? updatedPost : post
-      ));
-      setEditingPost(null);
-      setShowBlogModal(false);
+      // Check if the post was actually updated
+      if (updatedPost) {
+        setPosts(posts.map(post => 
+          post.id === editingPost.id ? updatedPost : post
+        ));
+        setEditingPost(null);
+        setShowBlogModal(false);
+      } else {
+        // Post not found or not updated
+        setError('Failed to update blog post - post may have been deleted');
+        // Reload posts to get current state
+        await loadPosts();
+        setEditingPost(null);
+        setShowBlogModal(false);
+      }
     } catch (err) {
       console.error('Error updating post:', err);
       setError('Failed to update blog post');
+      // Reload posts to ensure we have the current state
+      await loadPosts();
+      setEditingPost(null);
+      setShowBlogModal(false);
     }
   };
 

@@ -91,10 +91,10 @@ export interface Project {
   updated_at: string;
 }
 
-// Helper function to handle API calls with increased timeout
+// Helper function to handle API calls with reduced timeout
 const withTimeout = async <T>(
   promise: Promise<T>,
-  timeoutMs: number = 30000,
+  timeoutMs: number = 10000,
   errorMessage: string = 'Request timed out'
 ): Promise<T> => {
   const timeoutPromise = new Promise<never>((_, reject) => {
@@ -119,7 +119,7 @@ export const blogAPI = {
         query = query.eq('published', true);
       }
       
-      const { data, error } = await withTimeout(query, 30000, 'Failed to load blog posts - request timed out');
+      const { data, error } = await withTimeout(query, 10000, 'Failed to load blog posts - request timed out');
       if (error) throw error;
       return data || [];
     } catch (error) {
@@ -136,7 +136,7 @@ export const blogAPI = {
           .insert([post])
           .select()
           .single(),
-        30000,
+        10000,
         'Failed to create blog post - request timed out'
       );
       
@@ -156,8 +156,8 @@ export const blogAPI = {
           .update(updates)
           .eq('id', id)
           .select()
-          .single(),
-        30000,
+          .maybeSingle(),
+        10000,
         'Failed to update blog post - request timed out'
       );
       
@@ -176,7 +176,7 @@ export const blogAPI = {
           .from('blog_posts')
           .delete()
           .eq('id', id),
-        30000,
+        10000,
         'Failed to delete blog post - request timed out'
       );
       
@@ -201,7 +201,7 @@ export const projectsAPI = {
         query = query.eq('user_id', userId);
       }
       
-      const { data, error } = await withTimeout(query, 30000, 'Failed to load projects - request timed out');
+      const { data, error } = await withTimeout(query, 10000, 'Failed to load projects - request timed out');
       if (error) throw error;
       return data || [];
     } catch (error) {
@@ -218,7 +218,7 @@ export const projectsAPI = {
           .insert([project])
           .select()
           .single(),
-        30000,
+        10000,
         'Failed to create project - request timed out'
       );
       
@@ -238,8 +238,8 @@ export const projectsAPI = {
           .update(updates)
           .eq('id', id)
           .select()
-          .single(),
-        30000,
+          .maybeSingle(),
+        10000,
         'Failed to update project - request timed out'
       );
       
@@ -258,7 +258,7 @@ export const projectsAPI = {
           .from('projects')
           .delete()
           .eq('id', id),
-        30000,
+        10000,
         'Failed to delete project - request timed out'
       );
       
@@ -293,7 +293,7 @@ export const workEntriesAPI = {
           .gte('entry_date', startDate)
           .lte('entry_date', endDate)
           .order('entry_date', { ascending: true }),
-        30000,
+        10000,
         'Failed to load annual data - request timed out'
       );
       
@@ -318,7 +318,7 @@ export const workEntriesAPI = {
           .eq('user_id', userId)
           .gte('entry_date', startDate)
           .lte('entry_date', endDate),
-        30000,
+        10000,
         'Failed to load daily totals - request timed out'
       );
       

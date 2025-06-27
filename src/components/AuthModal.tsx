@@ -47,7 +47,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
     const timeoutId = setTimeout(() => {
       setLoading(false);
       setError('Request timed out. Please check your connection and try again.');
-    }, 8000); // 8 second timeout
+    }, 15000); // Reduced timeout to 15 seconds
 
     try {
       // Check if Supabase is configured
@@ -112,8 +112,10 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
       clearTimeout(timeoutId);
       console.error('Authentication error:', err);
       
-      // Handle specific error types
-      if (err.message.includes('Invalid login credentials') || err.message.includes('Invalid email or password')) {
+      // Handle specific error types with improved messaging
+      if (err.message.includes('Invalid login credentials') || 
+          err.message.includes('Invalid email or password') ||
+          err.message.includes('invalid_credentials')) {
         setError('Invalid email or password. Please check your credentials and try again.');
       } else if (err.message.includes('timeout') || err.message.includes('AbortError')) {
         setError('Connection timeout. Please check your internet connection and try again.');
@@ -123,6 +125,8 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
         setError('Please check your email and confirm your account before logging in.');
       } else if (err.message.includes('Too many requests')) {
         setError('Too many attempts. Please wait a few minutes before trying again.');
+      } else if (err.message.includes('network') || err.message.includes('fetch')) {
+        setError('Network error. Please check your internet connection and try again.');
       } else {
         setError(err.message || 'An unexpected error occurred. Please try again.');
       }
