@@ -6,7 +6,7 @@ import BlogModal, { BlogPostData } from '../components/BlogModal';
 import CommentSystem from '../components/CommentSystem';
 
 const Blog: React.FC = () => {
-  const { user, isAdmin } = useAuth();
+  const { user, canEditContent } = useAuth();
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedPost, setExpandedPost] = useState<string | null>(null);
@@ -24,7 +24,7 @@ const Blog: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      const data = await blogAPI.getAll(isAdmin ? user?.id : undefined);
+      const data = await blogAPI.getAll(canEditContent ? user?.id : undefined);
       setPosts(data || []);
     } catch (err) {
       console.error('Error loading posts:', err);
@@ -203,7 +203,7 @@ const Blog: React.FC = () => {
           {currentPosts.length === 0 ? (
             <div className="text-center py-12">
               <p className="text-gray-500 text-lg mb-4">No blog posts yet</p>
-              {isAdmin && (
+              {canEditContent && (
                 <button
                   onClick={() => setShowBlogModal(true)}
                   className="text-blue-600 hover:text-blue-700 transition-colors"
@@ -231,7 +231,7 @@ const Blog: React.FC = () => {
                       </div>
                     </div>
                     
-                    {isAdmin && (
+                    {canEditContent && (
                       <div className="flex space-x-2 ml-4">
                         <button
                           onClick={(e) => {
@@ -270,7 +270,7 @@ const Blog: React.FC = () => {
                 )}
 
                 {expandedPost === post.id && (
-                  <CommentSystem postId={parseInt(post.id.replace(/-/g, '').substring(0, 8), 16)} />
+                  <CommentSystem postId={post.id} />
                 )}
               </article>
             ))
@@ -291,7 +291,7 @@ const Blog: React.FC = () => {
           </div>
         )}
 
-        {isAdmin && (
+        {canEditContent && (
           <button 
             onClick={() => {
               setEditingPost(null);

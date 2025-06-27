@@ -1,44 +1,112 @@
-import React, { useState } from 'react';
-import { MessageCircle, Send, User } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { MessageCircle, Send, User, Trash2, Shield, Star } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
 
 interface Comment {
-  id: number;
-  postId: number;
-  author: string;
+  id: string;
+  post_id: string;
+  user_id: string;
   content: string;
-  timestamp: string;
+  created_at: string;
+  user_profiles?: {
+    email: string;
+    role: string;
+  };
 }
 
 interface CommentSystemProps {
-  postId: number;
+  postId: string;
 }
 
 const CommentSystem: React.FC<CommentSystemProps> = ({ postId }) => {
-  const { user, isAuthenticated } = useAuth();
-  const [comments, setComments] = useState<Comment[]>(() => {
-    const stored = localStorage.getItem(`comments_${postId}`);
-    return stored ? JSON.parse(stored) : [];
-  });
+  const { user, canComment, isAdmin } = useAuth();
+  const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState('');
   const [showComments, setShowComments] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmitComment = (e: React.FormEvent) => {
+  useEffect(() => {
+    if (showComments) {
+      loadComments();
+    }
+  }, [showComments, postId]);
+
+  const loadComments = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('blog_comments')
+        .select(`
+          *,
+          user_profiles (
+            email,
+            role
+          )
+        `)
+        .eq('post_id', postId)
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+      setComments(data || []);
+    } catch (error) {
+      console.error('Error loading comments:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmitComment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newComment.trim() || !user) return;
+    if (!newComment.trim() || !user || !canComment) return;
 
-    const comment: Comment = {
-      id: Date.now(),
-      postId,
-      author: user.email,
-      content: newComment.trim(),
-      timestamp: new Date().toISOString()
-    };
+    try {
+      setSubmitting(true);
+      const { data, error } = await supabase
+        .from('blog_comments')
+        .insert([{
+          post_id: postId,
+          user_id: user.id,
+          content: newComment.trim()
+        }])
+        .select(`
+          *,
+          user_profiles (
+            email,
+            role
+          )
+        `)
+        .single();
 
-    const updatedComments = [...comments, comment];
-    setComments(updatedComments);
-    localStorage.setItem(`comments_${postId}`, JSON.stringify(updatedComments));
-    setNewComment('');
+      if (error) throw error;
+
+      if (data) {
+        setComments([...comments, data]);
+        setNewComment('');
+      }
+    } catch (error) {
+      console.error('Error submitting comment:', error);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeleteComment = async (commentId: string) => {
+    if (!confirm('Are you sure you want to delete this comment?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('blog_comments')
+        .delete()
+        .eq('id', commentId);
+
+      if (error) throw error;
+
+      setComments(comments.filter(comment => comment.id !== commentId));
+    } catch (error) {
+      console.error('Error deleting comment:', error);
+    }
   };
 
   const formatCommentDate = (timestamp: string) => {
@@ -56,6 +124,16 @@ const CommentSystem: React.FC<CommentSystemProps> = ({ postId }) => {
     return date.toLocaleDateString();
   };
 
+  const getRoleIcon = (role: string) => {
+    if (role === 'admin') return <Shield size={12} className="text-red-500" />;
+    if (role === 'specialized') return <Star size={12} className="text-yellow-500" />;
+    return null;
+  };
+
+  const canDeleteComment = (comment: Comment) => {
+    return isAdmin || (user && comment.user_id === user.id);
+  };
+
   return (
     <div className="mt-6 pt-6 border-t border-gray-200">
       <button
@@ -69,7 +147,7 @@ const CommentSystem: React.FC<CommentSystemProps> = ({ postId }) => {
       {showComments && (
         <div className="space-y-4">
           {/* Comment Form */}
-          {isAuthenticated && (
+          {canComment ? (
             <form onSubmit={handleSubmitComment} className="flex space-x-3">
               <div className="flex-shrink-0">
                 <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center">
@@ -83,24 +161,38 @@ const CommentSystem: React.FC<CommentSystemProps> = ({ postId }) => {
                   placeholder="Add a comment..."
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   rows={3}
+                  disabled={submitting}
                 />
                 <div className="mt-2 flex justify-end">
                   <button
                     type="submit"
-                    disabled={!newComment.trim()}
+                    disabled={!newComment.trim() || submitting}
                     className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     <Send size={16} />
-                    <span>Comment</span>
+                    <span>{submitting ? 'Posting...' : 'Comment'}</span>
                   </button>
                 </div>
               </div>
             </form>
+          ) : (
+            <div className="text-center py-4 bg-gray-50 rounded-lg">
+              <p className="text-gray-600">
+                {user 
+                  ? 'You need enhanced access to comment on posts.' 
+                  : 'Please log in to comment on posts.'
+                }
+              </p>
+            </div>
           )}
 
           {/* Comments List */}
           <div className="space-y-4">
-            {comments.length === 0 ? (
+            {loading ? (
+              <div className="text-center py-4">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
+              </div>
+            ) : comments.length === 0 ? (
               <p className="text-gray-500 text-center py-4">No comments yet. Be the first to comment!</p>
             ) : (
               comments.map((comment) => (
@@ -113,12 +205,26 @@ const CommentSystem: React.FC<CommentSystemProps> = ({ postId }) => {
                   <div className="flex-1">
                     <div className="bg-gray-50 rounded-lg p-3">
                       <div className="flex items-center justify-between mb-1">
-                        <span className="font-medium text-gray-900 text-sm">
-                          {comment.author}
-                        </span>
-                        <span className="text-xs text-gray-500">
-                          {formatCommentDate(comment.timestamp)}
-                        </span>
+                        <div className="flex items-center space-x-2">
+                          <span className="font-medium text-gray-900 text-sm">
+                            {comment.user_profiles?.email || 'Unknown User'}
+                          </span>
+                          {comment.user_profiles?.role && getRoleIcon(comment.user_profiles.role)}
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <span className="text-xs text-gray-500">
+                            {formatCommentDate(comment.created_at)}
+                          </span>
+                          {canDeleteComment(comment) && (
+                            <button
+                              onClick={() => handleDeleteComment(comment.id)}
+                              className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                              title="Delete comment"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          )}
+                        </div>
                       </div>
                       <p className="text-gray-700 text-sm">{comment.content}</p>
                     </div>

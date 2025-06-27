@@ -11,6 +11,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [token, setToken] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   
@@ -44,9 +45,9 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
           setError('Invalid email or password');
         }
       } else {
-        success = await register(email, password);
+        success = await register(email, password, token.trim() || undefined);
         if (!success) {
-          setError('Registration failed. User may already exist.');
+          setError('Registration failed. Please check your details and try again.');
         }
       }
 
@@ -95,14 +96,30 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
           />
           
           {!isLogin && (
-            <input
-              type="password"
-              placeholder="Confirm Password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              className="auth-input"
-              required
-            />
+            <>
+              <input
+                type="password"
+                placeholder="Confirm Password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="auth-input"
+                required
+              />
+              
+              <input
+                type="text"
+                placeholder="Token (optional - for enhanced access)"
+                value={token}
+                onChange={(e) => setToken(e.target.value)}
+                className="auth-input"
+              />
+              
+              <div className="text-xs text-gray-500 mt-1 mb-2">
+                <strong>Access Levels:</strong><br/>
+                • <strong>Regular:</strong> View blogs and projects<br/>
+                • <strong>Enhanced:</strong> Access hours tracking + commenting (requires token)
+              </div>
+            </>
           )}
           
           {error && <div className="error-message">{error}</div>}
@@ -125,6 +142,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
               setEmail('');
               setPassword('');
               setConfirmPassword('');
+              setToken('');
             }}
             className="interactive"
           >
