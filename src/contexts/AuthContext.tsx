@@ -157,18 +157,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Skip database connectivity test for now and go straight to profile loading
       console.log('📋 Querying user_profiles table...');
       
-      // Use a Promise.race to implement our own timeout
-      const profileQuery = supabase
+      // Remove the aggressive timeout and let the query complete naturally
+      const { data: profile, error } = await supabase
         .from('user_profiles')
         .select('*')
         .eq('id', authUser.id)
         .maybeSingle();
-
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Query timeout')), 1500);
-      });
-
-      const { data: profile, error } = await Promise.race([profileQuery, timeoutPromise]) as any;
 
       clearTimeout(profileTimeout);
 
