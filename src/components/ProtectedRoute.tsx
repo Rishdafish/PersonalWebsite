@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import AuthModal from './AuthModal';
 import AccessDeniedModal from './AccessDeniedModal';
@@ -17,9 +17,25 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   const { isAuthenticated, isAdmin, isSpecialized, loading } = useAuth();
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showAccessDenied, setShowAccessDenied] = useState(false);
+  const [localLoading, setLocalLoading] = useState(true);
 
-  // Show loading while checking authentication - but with a shorter timeout
-  if (loading) {
+  // Add a local timeout to prevent infinite loading
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      console.log('🚨 ProtectedRoute loading timeout, forcing render');
+      setLocalLoading(false);
+    }, 3000); // 3 second timeout
+
+    if (!loading) {
+      clearTimeout(timeout);
+      setLocalLoading(false);
+    }
+
+    return () => clearTimeout(timeout);
+  }, [loading]);
+
+  // Show loading while checking authentication
+  if (loading || localLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
         <div className="text-center">

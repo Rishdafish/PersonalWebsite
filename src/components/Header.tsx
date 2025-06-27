@@ -29,15 +29,27 @@ const Header: React.FC = () => {
     setIsDropdownOpen(!isDropdownOpen);
   };
 
-  const handleUserIconClick = () => {
-    if (user) {
-      logout();
+  const handleUserIconClick = async () => {
+    console.log('🖱️ User icon clicked, authenticated:', isAuthenticated);
+    
+    if (isAuthenticated && user) {
+      console.log('👋 Attempting to logout user:', user.email);
+      try {
+        await logout();
+        console.log('✅ Logout completed successfully');
+        // Force page refresh to ensure clean state
+        window.location.href = '/';
+      } catch (error) {
+        console.error('❌ Logout failed:', error);
+      }
     } else {
+      console.log('🔐 Opening auth modal for login');
       setShowAuthModal(true);
     }
   };
 
   const handleAuthSuccess = () => {
+    console.log('🎉 Auth success, closing modal');
     setShowAuthModal(false);
   };
 

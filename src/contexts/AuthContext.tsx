@@ -25,7 +25,7 @@ interface AuthContextType {
   userProfile: UserProfile | null;
   login: (email: string, password: string) => Promise<boolean>;
   register: (email: string, password: string, token?: string) => Promise<boolean>;
-  logout: () => void;
+  logout: () => Promise<void>;
   isAuthenticated: boolean;
   isAdmin: boolean;
   isSpecialized: boolean;
@@ -60,13 +60,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     let mounted = true;
     let loadingTimeout: NodeJS.Timeout;
 
-    // Set a maximum loading time of 3 seconds (reduced further)
+    // Set a maximum loading time
     loadingTimeout = setTimeout(() => {
       if (mounted) {
         console.log('🚨 Auth loading timeout reached, setting loading to false');
         setLoading(false);
       }
-    }, 3000);
+    }, 5000); // Increased to 5 seconds for better reliability
 
     // Get initial session
     const getInitialSession = async () => {
@@ -148,16 +148,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const profileTimeout = setTimeout(() => {
       console.log('⏰ Profile loading timeout, creating fallback user');
       createFallbackUser(authUser);
-    }, 2000); // Reduced to 2 seconds
+    }, 3000); // Increased timeout
 
     try {
       console.log('👤 Loading profile for user:', authUser.email);
       console.log('🆔 User ID:', authUser.id);
       
-      // Skip database connectivity test for now and go straight to profile loading
       console.log('📋 Querying user_profiles table...');
       
-      // Remove the aggressive timeout and let the query complete naturally
       const { data: profile, error } = await supabase
         .from('user_profiles')
         .select('*')
@@ -168,8 +166,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (error) {
         console.error('❌ Error loading user profile:', error);
-        
-        // For any error, create fallback user immediately
         console.log('⚠️ Creating fallback user due to profile error');
         createFallbackUser(authUser);
         return;
@@ -290,8 +286,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (data.user) {
         console.log('✅ Login successful, user:', data.user.email);
-        
-        // The auth state change handler will load the profile
         return true;
       }
 
@@ -355,15 +349,29 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const logout = async () => {
+  const logout = async (): Promise<void> => {
     try {
-      console.log('👋 Logging out user');
-      await supabase.auth.signOut();
+      console.log('👋 Starting logout process...');
+      
+      // Clear local state immediately
       setUser(null);
       setUserProfile(null);
+      
+      // Sign out from Supabase
+      const { error } = await supabase.auth.signOut();
+      
+      if (error) {
+        console.error('❌ Logout error:', error);
+        throw error;
+      }
+      
       console.log('✅ Logout successful');
     } catch (error) {
       console.error('❌ Logout error:', error);
+      // Even if logout fails, clear local state
+      setUser(null);
+      setUserProfile(null);
+      throw error;
     }
   };
 
