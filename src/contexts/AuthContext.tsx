@@ -72,7 +72,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       // Simple health check with shorter timeout
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const timeoutId = setTimeout(() => controller.abort(), 3000); // Reduced to 3 seconds
 
       const { error } = await supabase
         .from('users')
@@ -137,7 +137,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
         // Get session with shorter timeout
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 8000);
+        const timeoutId = setTimeout(() => controller.abort(), 5000); // Reduced to 5 seconds
 
         const { data: { session }, error } = await supabase.auth.getSession();
         
@@ -229,7 +229,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       // Check if user_profiles table exists and has data with timeout
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const timeoutId = setTimeout(() => controller.abort(), 3000); // Reduced to 3 seconds
 
       const { data: profile, error } = await supabase
         .from('user_profiles')
@@ -301,7 +301,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const timeoutId = setTimeout(() => controller.abort(), 3000); // Reduced to 3 seconds
 
       const { data, error } = await supabase
         .from('user_tokens')
@@ -332,9 +332,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
 
     try {
-      // Add timeout with AbortController
+      // Add timeout with AbortController - reduced timeout for faster feedback
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      const timeoutId = setTimeout(() => controller.abort(), 6000); // Reduced to 6 seconds
 
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
@@ -346,7 +346,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (error) {
         console.error('Login error:', error);
         
-        // Provide more specific error messages
+        // Provide more specific error messages with immediate feedback
         if (error.message.includes('Invalid login credentials')) {
           throw new Error('Invalid email or password. Please check your credentials and try again.');
         } else if (error.message.includes('Email not confirmed')) {
@@ -410,9 +410,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         };
       }
 
-      // Add timeout with AbortController
+      // Add timeout with AbortController - reduced timeout for faster feedback
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      const timeoutId = setTimeout(() => controller.abort(), 6000); // Reduced to 6 seconds
 
       const { data, error } = await supabase.auth.signUp(signUpData);
 
@@ -421,7 +421,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (error) {
         console.error('Registration error:', error);
         
-        // Provide more specific error messages
+        // Provide more specific error messages with immediate feedback
         if (error.message.includes('User already registered')) {
           throw new Error('An account with this email already exists. Please try logging in instead.');
         } else if (error.message.includes('Password should be at least')) {
@@ -456,7 +456,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       if (isSupabaseConfigured) {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        const timeoutId = setTimeout(() => controller.abort(), 3000); // Reduced timeout
         
         await supabase.auth.signOut();
         clearTimeout(timeoutId);

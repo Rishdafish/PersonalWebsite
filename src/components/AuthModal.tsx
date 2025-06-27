@@ -43,6 +43,12 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
     setError('');
     setLoading(true);
 
+    // Set a maximum timeout for the entire operation
+    const timeoutId = setTimeout(() => {
+      setLoading(false);
+      setError('Request timed out. Please check your connection and try again.');
+    }, 8000); // 8 second timeout
+
     try {
       // Check if Supabase is configured
       if (!isSupabaseConfigured) {
@@ -93,16 +99,35 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
         success = await register(email.trim(), password, token.trim() || undefined);
       }
 
+      // Clear timeout if we get here
+      clearTimeout(timeoutId);
+
       if (success) {
         onAuthSuccess();
         onClose();
       } else {
-        setError('Authentication failed. Please try again.');
+        setError('Authentication failed. Please check your credentials and try again.');
       }
     } catch (err: any) {
+      clearTimeout(timeoutId);
       console.error('Authentication error:', err);
-      setError(err.message || 'An unexpected error occurred. Please try again.');
+      
+      // Handle specific error types
+      if (err.message.includes('Invalid login credentials') || err.message.includes('Invalid email or password')) {
+        setError('Invalid email or password. Please check your credentials and try again.');
+      } else if (err.message.includes('timeout') || err.message.includes('AbortError')) {
+        setError('Connection timeout. Please check your internet connection and try again.');
+      } else if (err.message.includes('User already registered')) {
+        setError('An account with this email already exists. Please try logging in instead.');
+      } else if (err.message.includes('Email not confirmed')) {
+        setError('Please check your email and confirm your account before logging in.');
+      } else if (err.message.includes('Too many requests')) {
+        setError('Too many attempts. Please wait a few minutes before trying again.');
+      } else {
+        setError(err.message || 'An unexpected error occurred. Please try again.');
+      }
     } finally {
+      clearTimeout(timeoutId);
       setLoading(false);
     }
   };
