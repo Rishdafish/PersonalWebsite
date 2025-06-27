@@ -9,12 +9,19 @@ console.log('Anon Key:', supabaseAnonKey ? '✅ Present' : '❌ Missing');
 
 if (!supabaseUrl || !supabaseAnonKey) {
   console.error('❌ Missing Supabase environment variables');
-  console.error('VITE_SUPABASE_URL:', supabaseUrl);
-  console.error('VITE_SUPABASE_ANON_KEY:', supabaseAnonKey ? 'Present' : 'Missing');
-  throw new Error('Missing Supabase environment variables');
+  console.error('Please check your .env file and ensure it contains:');
+  console.error('VITE_SUPABASE_URL=your_project_url');
+  console.error('VITE_SUPABASE_ANON_KEY=your_anon_key');
+  
+  // Don't throw error in development, create a mock client
+  if (import.meta.env.DEV) {
+    console.warn('⚠️ Running in development mode without Supabase connection');
+  } else {
+    throw new Error('Missing Supabase environment variables');
+  }
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+export const supabase = createClient(supabaseUrl || 'http://localhost:54321', supabaseAnonKey || 'mock-key', {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
@@ -23,20 +30,22 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   }
 });
 
-console.log('✅ Supabase client initialized successfully');
+console.log('✅ Supabase client initialized');
 
-// Test connection on initialization
-supabase.from('user_tokens').select('count').limit(1)
-  .then(({ data, error }) => {
-    if (error) {
-      console.error('❌ Supabase connection test failed:', error);
-    } else {
-      console.log('✅ Supabase connection test successful');
-    }
-  })
-  .catch((error) => {
-    console.error('❌ Supabase connection test error:', error);
-  });
+// Test connection only if we have real credentials
+if (supabaseUrl && supabaseAnonKey && supabaseUrl !== 'http://localhost:54321') {
+  supabase.from('user_tokens').select('count').limit(1)
+    .then(({ data, error }) => {
+      if (error) {
+        console.error('❌ Supabase connection test failed:', error);
+      } else {
+        console.log('✅ Supabase connection test successful');
+      }
+    })
+    .catch((error) => {
+      console.error('❌ Supabase connection test error:', error);
+    });
+}
 
 // Database types
 export interface UserStatistics {
