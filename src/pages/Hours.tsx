@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Clock, Calendar, TrendingUp, Award, Target, Flame, Plus, Edit3, Trophy, Settings, BookOpen } from 'lucide-react';
+import { Clock, Calendar, TrendingUp, Award, Target, Flame, Plus, Edit3, Trophy, Settings, BookOpen, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase, UserStatistics, Subject, Achievement, WorkEntry } from '../lib/supabase';
 import WorkEntryModal, { WorkEntryData } from '../components/WorkEntryModal';
@@ -12,7 +12,10 @@ const Hours: React.FC = () => {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [achievements, setAchievements] = useState<Achievement[]>([]);
   const [workEntries, setWorkEntries] = useState<WorkEntry[]>([]);
+  const [yearlyData, setYearlyData] = useState<WorkEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const entriesPerPage = 10;
 
   // Modal states
   const [showWorkModal, setShowWorkModal] = useState(false);
@@ -78,11 +81,30 @@ const Hours: React.FC = () => {
           )
         `)
         .eq('user_id', user.id)
-        .order('entry_date', { ascending: false })
-        .limit(20);
+        .order('entry_date', { ascending: false });
 
       if (entriesData) {
         setWorkEntries(entriesData);
+      }
+
+      // Load yearly data for 2025
+      const { data: yearlyEntriesData } = await supabase
+        .from('work_entries')
+        .select(`
+          *,
+          subjects (
+            id,
+            name,
+            icon
+          )
+        `)
+        .eq('user_id', user.id)
+        .gte('entry_date', '2025-01-01')
+        .lte('entry_date', '2025-12-31')
+        .order('entry_date', { ascending: true });
+
+      if (yearlyEntriesData) {
+        setYearlyData(yearlyEntriesData);
       }
 
     } catch (error) {
@@ -121,6 +143,8 @@ const Hours: React.FC = () => {
         setWorkEntries([data, ...workEntries]);
         await updateStatistics();
         await updateSubjectProgress(entryData.subject_id, entryData.hours);
+        // Reload yearly data
+        loadData();
       }
     } catch (error) {
       console.error('Error creating work entry:', error);
@@ -158,9 +182,31 @@ const Hours: React.FC = () => {
         ));
         await updateStatistics();
         setEditingEntry(null);
+        // Reload yearly data
+        loadData();
       }
     } catch (error) {
       console.error('Error updating work entry:', error);
+    }
+  };
+
+  const handleDeleteWorkEntry = async (entryId: string) => {
+    if (!confirm('Are you sure you want to delete this entry?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('work_entries')
+        .delete()
+        .eq('id', entryId);
+
+      if (error) throw error;
+
+      setWorkEntries(workEntries.filter(entry => entry.id !== entryId));
+      await updateStatistics();
+      // Reload yearly data
+      loadData();
+    } catch (error) {
+      console.error('Error deleting work entry:', error);
     }
   };
 
@@ -381,8 +427,39 @@ const Hours: React.FC = () => {
     return last7Days;
   };
 
+  // Generate yearly chart data
+  const generateYearlyChartData = () => {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    
+    const monthlyData = months.map((month, index) => {
+      const monthEntries = yearlyData.filter(entry => {
+        const entryDate = new Date(entry.entry_date);
+        return entryDate.getMonth() === index && entryDate.getFullYear() === 2025;
+      });
+      
+      const totalHours = monthEntries.reduce((sum, entry) => sum + entry.hours, 0);
+      
+      return {
+        month,
+        hours: totalHours
+      };
+    });
+    
+    return monthlyData;
+  };
+
   const chartData = generateChartData();
+  const yearlyChartData = generateYearlyChartData();
   const maxChartHours = Math.max(...chartData.map(d => d.hours), 1);
+  const maxYearlyHours = Math.max(...yearlyChartData.map(d => d.hours), 1);
+
+  // Pagination for recent entries
+  const totalPages = Math.ceil(workEntries.length / entriesPerPage);
+  const startIndex = (currentPage - 1) * entriesPerPage;
+  const currentEntries = workEntries.slice(startIndex, startIndex + entriesPerPage);
 
   if (loading) {
     return (
@@ -548,6 +625,25 @@ const Hours: React.FC = () => {
           </div>
         </div>
 
+        {/* Yearly Hours Chart */}
+        <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 mb-12">
+          <h3 className="text-xl font-semibold text-gray-900 mb-6">Yearly Hours (2025)</h3>
+          <div className="space-y-4">
+            {yearlyChartData.map((month, index) => (
+              <div key={index} className="flex items-center space-x-4">
+                <div className="w-12 text-sm font-medium text-gray-600">{month.month}</div>
+                <div className="flex-1 bg-gray-200 rounded-full h-6 relative">
+                  <div 
+                    className="bg-gradient-to-r from-blue-500 to-purple-500 h-6 rounded-full transition-all duration-500"
+                    style={{ width: `${maxYearlyHours > 0 ? (month.hours / maxYearlyHours) * 100 : 0}%` }}
+                  ></div>
+                </div>
+                <div className="w-12 text-sm font-semibold text-gray-900">{month.hours}h</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {/* Achievements Section */}
         <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 mb-12">
           <div className="flex justify-between items-center mb-6">
@@ -617,7 +713,7 @@ const Hours: React.FC = () => {
             </button>
           </div>
           <div className="space-y-4">
-            {workEntries.length === 0 ? (
+            {currentEntries.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
                 <Clock className="w-12 h-12 mx-auto mb-4 text-gray-300" />
                 <p>No work entries yet</p>
@@ -629,7 +725,7 @@ const Hours: React.FC = () => {
                 </button>
               </div>
             ) : (
-              workEntries.map((entry) => (
+              currentEntries.map((entry) => (
                 <div key={entry.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
                   <div className="flex items-center space-x-4">
                     <div className="p-2 bg-blue-100 rounded-lg">
@@ -647,20 +743,69 @@ const Hours: React.FC = () => {
                   </div>
                   <div className="flex items-center space-x-3">
                     <span className="font-semibold text-gray-900">{entry.hours}h</span>
-                    <button
-                      onClick={() => {
-                        setEditingEntry(entry);
-                        setShowWorkModal(true);
-                      }}
-                      className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
-                    >
-                      <Edit3 size={14} />
-                    </button>
+                    {isAdmin && (
+                      <>
+                        <button
+                          onClick={() => {
+                            setEditingEntry(entry);
+                            setShowWorkModal(true);
+                          }}
+                          className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+                        >
+                          <Edit3 size={14} />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteWorkEntry(entry.id)}
+                          className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               ))
             )}
           </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex justify-center items-center space-x-4 mt-6">
+              <button
+                onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                disabled={currentPage === 1}
+                className="flex items-center space-x-2 px-3 py-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronLeft size={16} />
+                <span>Previous</span>
+              </button>
+              
+              <div className="flex space-x-2">
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                  <button
+                    key={page}
+                    onClick={() => setCurrentPage(page)}
+                    className={`px-3 py-2 rounded-lg transition-colors ${
+                      currentPage === page
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    {page}
+                  </button>
+                ))}
+              </div>
+              
+              <button
+                onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                disabled={currentPage === totalPages}
+                className="flex items-center space-x-2 px-3 py-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                <span>Next</span>
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Modals */}

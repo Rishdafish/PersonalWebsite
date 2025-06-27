@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { User, Crown, Key, UserCheck } from 'lucide-react';
+import { User, Crown, Diamond, UserCheck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import AuthModal from './AuthModal';
 
@@ -60,17 +60,10 @@ const Header: React.FC = () => {
   };
 
   const getRoleIcon = () => {
-    if (isAdmin) return <Crown size={14} className="text-yellow-500" />;
-    if (isSpecialized) return <Key size={14} className="text-blue-500" />;
-    if (isRegular) return <UserCheck size={14} className="text-gray-500" />;
+    if (isAdmin) return <Crown size={16} className="text-yellow-500" />;
+    if (isSpecialized) return <Diamond size={16} className="text-blue-500" />;
+    if (isRegular) return <UserCheck size={16} className="text-gray-500" />;
     return null;
-  };
-
-  const getRoleText = () => {
-    if (isAdmin) return 'Admin';
-    if (isSpecialized) return 'Specialized';
-    if (isRegular) return 'Regular';
-    return '';
   };
 
   return (
@@ -128,11 +121,7 @@ const Header: React.FC = () => {
           <div className={`user-section ${isProjectsPage || isBlogPage ? 'inverse' : ''}`}>
             {user && (
               <div className="flex items-center space-x-2">
-                <div className="flex items-center space-x-1">
-                  {getRoleIcon()}
-                  <span className="text-xs font-medium">{getRoleText()}</span>
-                </div>
-                <span className="text-sm">{user.email}</span>
+                {getRoleIcon()}
               </div>
             )}
             <button 

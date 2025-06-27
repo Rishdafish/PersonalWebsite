@@ -12,7 +12,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [token, setToken] = useState('');
+  const [token, setToken] = useState('hello_1210');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState('');
@@ -104,7 +104,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
     setEmail('');
     setPassword('');
     setConfirmPassword('');
-    setToken('');
+    setToken('hello_1210');
     setError('');
     setTokenValidated(null);
     setShowPassword(false);
@@ -130,17 +130,6 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
         </button>
         
         <h2>{isLogin ? 'Login' : 'Create Account'}</h2>
-        
-        {!isLogin && (
-          <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-            <h3 className="font-semibold text-blue-900 mb-2">Account Types:</h3>
-            <ul className="text-sm text-blue-800 space-y-1">
-              <li><strong>Regular:</strong> Basic access to public content</li>
-              <li><strong>Specialized:</strong> Full access with valid token</li>
-              <li><strong>Admin:</strong> Full system control (automatic for admin emails)</li>
-            </ul>
-          </div>
-        )}
         
         <form onSubmit={handleSubmit} className="auth-form">
           <input
@@ -198,7 +187,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
               <div className="relative">
                 <input
                   type="text"
-                  placeholder="Specialized Access Token (Optional)"
+                  placeholder="Specialized Access Token"
                   value={token}
                   onChange={(e) => {
                     setToken(e.target.value);
