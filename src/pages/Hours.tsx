@@ -5,6 +5,7 @@ import { supabase, UserStatistics, Subject, Achievement, WorkEntry } from '../li
 import WorkEntryModal, { WorkEntryData } from '../components/WorkEntryModal';
 import SubjectModal, { SubjectData } from '../components/SubjectModal';
 import AchievementModal, { AchievementData } from '../components/AchievementModal';
+import DailyHoursLineGraph from '../components/DailyHoursLineGraph';
 
 const Hours: React.FC = () => {
   const { user, isAdmin } = useAuth();
@@ -535,6 +536,12 @@ const Hours: React.FC = () => {
             <p className="text-gray-600 text-sm">Consecutive days</p>
           </div>
         </div>
+
+        {/* Daily Hours Line Graph */}
+        <DailyHoursLineGraph 
+          workEntries={workEntries} 
+          className="mb-12"
+        />
 
         {/* Charts and Progress Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
