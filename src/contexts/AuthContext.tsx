@@ -254,25 +254,93 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const validateToken = async (token: string): Promise<boolean> => {
     try {
-      console.log('🔍 Validating token:', token.substring(0, 5) + '...');
+      console.log('🔍 Starting token validation for:', token);
+      console.log('🔍 Token length:', token.length);
+      console.log('🔍 Token characters:', token.split('').map(c => c.charCodeAt(0)));
       
+      // First, let's check if we can connect to the database at all
+      console.log('🔗 Testing database connection...');
+      const { data: connectionTest, error: connectionError } = await supabase
+        .from('user_tokens')
+        .select('count')
+        .limit(1);
+      
+      if (connectionError) {
+        console.error('❌ Database connection failed:', connectionError);
+        return false;
+      }
+      
+      console.log('✅ Database connection successful');
+      
+      // Now let's get all tokens to see what's in the database
+      console.log('📋 Fetching all tokens from database...');
+      const { data: allTokens, error: allTokensError } = await supabase
+        .from('user_tokens')
+        .select('*');
+      
+      if (allTokensError) {
+        console.error('❌ Error fetching all tokens:', allTokensError);
+      } else {
+        console.log('📋 All tokens in database:', allTokens);
+        console.log('📋 Number of tokens:', allTokens?.length || 0);
+        
+        if (allTokens) {
+          allTokens.forEach((tokenRow, index) => {
+            console.log(`🎫 Token ${index + 1}:`, {
+              token: tokenRow.token,
+              isActive: tokenRow.is_active,
+              description: tokenRow.description,
+              matches: tokenRow.token === token
+            });
+          });
+        }
+      }
+      
+      // Now try the specific validation query
+      console.log('🎯 Performing specific token validation...');
       const { data, error } = await supabase
         .from('user_tokens')
         .select('*')
         .eq('token', token)
-        .eq('is_active', true)
-        .limit(1);
+        .eq('is_active', true);
 
+      console.log('🎯 Validation query result:', { data, error });
+      
       if (error) {
-        console.error('❌ Error validating token:', error);
+        console.error('❌ Error in token validation query:', error);
+        console.error('❌ Error code:', error.code);
+        console.error('❌ Error message:', error.message);
+        console.error('❌ Error details:', error.details);
         return false;
       }
 
       const isValid = data && data.length > 0;
       console.log('🎫 Token validation result:', isValid);
+      console.log('🎫 Data returned:', data);
+      
+      if (!isValid) {
+        console.log('❌ Token not found or inactive');
+        
+        // Let's try a more basic query to see if the token exists at all
+        console.log('🔍 Checking if token exists without active filter...');
+        const { data: basicData, error: basicError } = await supabase
+          .from('user_tokens')
+          .select('*')
+          .eq('token', token);
+        
+        console.log('🔍 Basic token check result:', { basicData, basicError });
+        
+        if (basicData && basicData.length > 0) {
+          console.log('⚠️ Token exists but may not be active:', basicData[0]);
+        } else {
+          console.log('❌ Token does not exist in database at all');
+        }
+      }
+      
       return isValid;
     } catch (error) {
-      console.error('❌ Error validating token:', error);
+      console.error('❌ Exception in validateToken:', error);
+      console.error('❌ Error stack:', error instanceof Error ? error.stack : 'No stack trace');
       return false;
     }
   };
@@ -311,13 +379,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       // Validate token if provided
       if (token) {
-        console.log('🎫 Validating provided token...');
+        console.log('🎫 Validating provided token before registration...');
         const isValidToken = await validateToken(token);
+        console.log('🎫 Pre-registration token validation result:', isValidToken);
+        
         if (!isValidToken) {
-          console.error('❌ Invalid token provided:', token);
+          console.error('❌ Invalid token provided during registration:', token);
           throw new Error('Invalid or expired token');
         }
-        console.log('✅ Token is valid');
+        console.log('✅ Token is valid, proceeding with registration');
       }
 
       const signUpData: any = {
@@ -332,34 +402,41 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.log('📤 Sending signup request to Supabase with data:', {
         email,
         hasToken: !!token,
-        tokenValue: token
+        tokenValue: token,
+        metadataKeys: Object.keys(signUpData.options.data)
       });
       
       const { data, error } = await supabase.auth.signUp(signUpData);
 
       if (error) {
         console.error('❌ Registration error:', error.message);
+        console.error('❌ Registration error code:', error.code);
+        console.error('❌ Registration error details:', error);
         return false;
       }
 
       if (data.user) {
         console.log('✅ Registration successful, user:', data.user.email);
-        console.log('🔍 User metadata:', data.user.user_metadata);
+        console.log('🔍 User metadata after registration:', data.user.user_metadata);
+        console.log('🔍 User ID:', data.user.id);
         
         // Wait a moment for triggers to execute, then manually create profile if needed
         setTimeout(async () => {
           try {
-            const { data: existingProfile } = await supabase
+            console.log('🔍 Checking if profile was created by trigger...');
+            const { data: existingProfile, error: profileError } = await supabase
               .from('user_profiles')
               .select('*')
               .eq('id', data.user!.id)
               .maybeSingle();
             
+            console.log('🔍 Profile check result:', { existingProfile, profileError });
+            
             if (!existingProfile) {
               console.log('⚠️ Profile not created by trigger, creating manually...');
               await createUserProfileManually(data.user!);
             } else {
-              console.log('✅ Profile exists from trigger');
+              console.log('✅ Profile exists from trigger:', existingProfile);
             }
           } catch (error) {
             console.error('❌ Error checking/creating profile after registration:', error);
