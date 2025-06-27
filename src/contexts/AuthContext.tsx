@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
+import type { User as SupabaseUser } from '@supabase/supabase-js';
 
 interface User {
   id: string;
@@ -29,105 +31,126 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
-// Helper function to validate UUID format
-const isValidUUID = (uuid: string): boolean => {
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-  return uuidRegex.test(uuid);
-};
-
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  // Updated admin credentials with valid UUID
+  // Admin email for admin privileges
   const ADMIN_EMAIL = 'rishabh.biry@gmail.com';
-  const ADMIN_PASSWORD = 'bIRYSMRS1210';
-  const ADMIN_ID = 'a1b2c3d4-e5f6-4789-1234-567890abcdef'; // Valid UUID format
 
   useEffect(() => {
-    // Check for stored user session
-    const storedUser = localStorage.getItem('user');
-    if (storedUser) {
+    // Get initial session
+    const getInitialSession = async () => {
       try {
-        const parsedUser = JSON.parse(storedUser);
-        
-        // Validate that the user has a valid UUID
-        if (!parsedUser.id || !isValidUUID(parsedUser.id)) {
-          console.warn('Invalid user ID found in localStorage, clearing user data');
-          localStorage.removeItem('user');
-          return;
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          setUser({
+            id: session.user.id,
+            email: session.user.email || '',
+            isAdmin: session.user.email === ADMIN_EMAIL
+          });
         }
-        
-        setUser(parsedUser);
       } catch (error) {
-        console.error('Error parsing stored user data:', error);
-        localStorage.removeItem('user');
+        console.error('Error getting initial session:', error);
+      } finally {
+        setLoading(false);
       }
-    }
+    };
+
+    getInitialSession();
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (session?.user) {
+          setUser({
+            id: session.user.id,
+            email: session.user.email || '',
+            isAdmin: session.user.email === ADMIN_EMAIL
+          });
+        } else {
+          setUser(null);
+        }
+        setLoading(false);
+      }
+    );
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const login = async (email: string, password: string): Promise<boolean> => {
-    // Check admin credentials
-    if (email === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
-      const adminUser = { id: ADMIN_ID, email, isAdmin: true };
-      setUser(adminUser);
-      localStorage.setItem('user', JSON.stringify(adminUser));
-      return true;
-    }
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-    // Check regular users
-    const users = JSON.parse(localStorage.getItem('users') || '[]');
-    const foundUser = users.find((u: any) => u.email === email && u.password === password);
-    
-    if (foundUser) {
-      // Ensure user has a valid UUID
-      if (!foundUser.id || !isValidUUID(foundUser.id)) {
-        foundUser.id = crypto.randomUUID();
-        // Update the stored users array with the new ID
-        const updatedUsers = users.map((u: any) => 
-          u.email === email ? foundUser : u
-        );
-        localStorage.setItem('users', JSON.stringify(updatedUsers));
+      if (error) {
+        console.error('Login error:', error.message);
+        return false;
       }
-      
-      const userData = { id: foundUser.id, email, isAdmin: false };
-      setUser(userData);
-      localStorage.setItem('user', JSON.stringify(userData));
-      return true;
-    }
 
-    return false;
+      if (data.user) {
+        setUser({
+          id: data.user.id,
+          email: data.user.email || '',
+          isAdmin: data.user.email === ADMIN_EMAIL
+        });
+        return true;
+      }
+
+      return false;
+    } catch (error) {
+      console.error('Login error:', error);
+      return false;
+    }
   };
 
   const register = async (email: string, password: string): Promise<boolean> => {
-    // Prevent duplicate admin registration
-    if (email === ADMIN_EMAIL) {
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+
+      if (error) {
+        console.error('Registration error:', error.message);
+        return false;
+      }
+
+      if (data.user) {
+        // Note: User will be set via the auth state change listener
+        // if email confirmation is disabled, or after email confirmation
+        return true;
+      }
+
+      return false;
+    } catch (error) {
+      console.error('Registration error:', error);
       return false;
     }
+  };
 
-    const users = JSON.parse(localStorage.getItem('users') || '[]');
-    
-    // Check if user already exists
-    if (users.find((u: any) => u.email === email)) {
-      return false;
+  const logout = async () => {
+    try {
+      await supabase.auth.signOut();
+      setUser(null);
+    } catch (error) {
+      console.error('Logout error:', error);
     }
-
-    // Generate a unique ID for the new user
-    const userId = crypto.randomUUID();
-
-    // Add new user with ID
-    users.push({ id: userId, email, password });
-    localStorage.setItem('users', JSON.stringify(users));
-
-    const userData = { id: userId, email, isAdmin: false };
-    setUser(userData);
-    localStorage.setItem('user', JSON.stringify(userData));
-    return true;
   };
 
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem('user');
-  };
+  // Don't render children until we've checked the initial session
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <AuthContext.Provider value={{
