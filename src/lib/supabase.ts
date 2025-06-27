@@ -10,6 +10,7 @@ console.log('Anon Key:', supabaseAnonKey ? '✅ Present' : '❌ Missing');
 // Validate URL format
 let validUrl = supabaseUrl;
 let validKey = supabaseAnonKey;
+let isRealConnection = false;
 
 if (supabaseUrl && !supabaseUrl.startsWith('http')) {
   console.error('❌ Invalid Supabase URL format. URL must start with http:// or https://');
@@ -27,9 +28,13 @@ if (!validUrl || !validKey) {
     console.warn('⚠️ Running in development mode with mock Supabase connection');
     validUrl = 'https://localhost:54321';
     validKey = 'mock-anon-key';
+    isRealConnection = false;
   } else {
     throw new Error('Missing or invalid Supabase environment variables');
   }
+} else {
+  // Check if we have real Supabase credentials
+  isRealConnection = validUrl.includes('.supabase.co') && validKey.length > 20;
 }
 
 export const supabase = createClient(validUrl, validKey, {
@@ -43,8 +48,8 @@ export const supabase = createClient(validUrl, validKey, {
 
 console.log('✅ Supabase client initialized');
 
-// Test connection only if we have real credentials
-if (validUrl && validKey && validUrl !== 'https://localhost:54321') {
+// Test connection only if we have real credentials and valid URL
+if (isRealConnection) {
   supabase.from('user_tokens').select('count').limit(1)
     .then(({ data, error }) => {
       if (error) {
@@ -56,6 +61,8 @@ if (validUrl && validKey && validUrl !== 'https://localhost:54321') {
     .catch((error) => {
       console.error('❌ Supabase connection test error:', error);
     });
+} else {
+  console.log('⚠️ Skipping connection test - using mock or invalid credentials');
 }
 
 // Database types
