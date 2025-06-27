@@ -72,8 +72,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     );
   }
 
-  // Check hours access - This should never be reached due to header navigation control
-  // But keeping as a fallback for direct URL access
+  // Check hours access
   if (requiresHoursAccess && !canAccessHours) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
