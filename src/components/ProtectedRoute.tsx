@@ -18,7 +18,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showAccessDenied, setShowAccessDenied] = useState(false);
 
-  // Show loading while checking authentication
+  // Show loading while checking authentication - but with a timeout
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">

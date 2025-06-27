@@ -58,10 +58,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   useEffect(() => {
     let mounted = true;
+    let loadingTimeout: NodeJS.Timeout;
+
+    // Set a maximum loading time of 10 seconds
+    loadingTimeout = setTimeout(() => {
+      if (mounted) {
+        console.log('Auth loading timeout reached, setting loading to false');
+        setLoading(false);
+      }
+    }, 10000);
 
     // Get initial session
     const getInitialSession = async () => {
       try {
+        console.log('Getting initial session...');
         const { data: { session }, error } = await supabase.auth.getSession();
         
         if (error) {
@@ -77,8 +87,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
 
         if (session?.user && mounted) {
+          console.log('Found existing session for:', session.user.email);
           await loadUserProfile(session.user);
         } else if (mounted) {
+          console.log('No existing session found');
           setUser(null);
           setUserProfile(null);
         }
@@ -90,6 +102,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
       } finally {
         if (mounted) {
+          clearTimeout(loadingTimeout);
           setLoading(false);
         }
       }
@@ -123,6 +136,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     return () => {
       mounted = false;
+      clearTimeout(loadingTimeout);
       subscription.unsubscribe();
     };
   }, []);
@@ -148,6 +162,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
         
         // For other errors, set a default user
+        console.log('Setting default user due to profile error');
         setUser({
           id: authUser.id,
           email: authUser.email || '',
@@ -160,7 +175,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
 
       if (profile) {
-        console.log('Profile loaded:', profile);
+        console.log('Profile loaded successfully:', profile.email, profile.role);
         setUserProfile(profile);
         setUser({
           id: profile.id,
@@ -187,6 +202,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const createUserProfile = async (authUser: SupabaseUser) => {
     try {
+      console.log('Creating user profile for:', authUser.email);
+      
       // Determine role based on email
       let role: 'admin' | 'regular' | 'specialized' = 'regular';
       if (['rishabh.biry@gmail.com', 'biryrishabh01@gmail.com', 'biryrishabh@gmail.com'].includes(authUser.email || '')) {
@@ -205,10 +222,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (error) {
         console.error('Error creating user profile:', error);
+        // Set a fallback user even if profile creation fails
+        setUser({
+          id: authUser.id,
+          email: authUser.email || '',
+          role: role,
+          isAdmin: role === 'admin',
+          isSpecialized: role === 'specialized',
+          isRegular: role === 'regular'
+        });
         return;
       }
 
       if (profile) {
+        console.log('Profile created successfully:', profile.email, profile.role);
         setUserProfile(profile);
         setUser({
           id: profile.id,
@@ -221,6 +248,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
     } catch (error) {
       console.error('Error creating user profile:', error);
+      // Set a fallback user
+      setUser({
+        id: authUser.id,
+        email: authUser.email || '',
+        role: 'regular',
+        isAdmin: false,
+        isSpecialized: false,
+        isRegular: true
+      });
     }
   };
 
