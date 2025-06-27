@@ -1,14 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { User, Shield, Star } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import AuthModal from './AuthModal';
+import AccessDeniedModal from './AccessDeniedModal';
 
 const Header: React.FC = () => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showAccessDenied, setShowAccessDenied] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
+  const navigate = useNavigate();
   const { user, logout, isAdmin, isSpecialized, canAccessHours } = useAuth();
 
   const isProjectsPage = location.pathname === '/projects';
@@ -38,6 +41,17 @@ const Header: React.FC = () => {
 
   const handleAuthSuccess = () => {
     setShowAuthModal(false);
+  };
+
+  const handleHoursClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDropdownOpen(false);
+    
+    if (!canAccessHours) {
+      setShowAccessDenied(true);
+    } else {
+      navigate('/hours');
+    }
   };
 
   const getRoleIcon = () => {
@@ -91,15 +105,12 @@ const Header: React.FC = () => {
                 >
                   Blog
                 </Link>
-                {canAccessHours && (
-                  <Link 
-                    to="/hours" 
-                    className={`dropdown-item ${isProjectsPage ? 'inverse' : ''} interactive`}
-                    onClick={() => setIsDropdownOpen(false)}
-                  >
-                    Hours
-                  </Link>
-                )}
+                <button
+                  onClick={handleHoursClick}
+                  className={`dropdown-item ${isProjectsPage ? 'inverse' : ''} interactive w-full text-left`}
+                >
+                  Hours {!canAccessHours && <span className="text-xs opacity-60">(Enhanced)</span>}
+                </button>
               </div>
             )}
           </div>
@@ -131,6 +142,14 @@ const Header: React.FC = () => {
         <AuthModal 
           onClose={() => setShowAuthModal(false)}
           onAuthSuccess={handleAuthSuccess}
+        />
+      )}
+
+      {showAccessDenied && (
+        <AccessDeniedModal
+          onClose={() => setShowAccessDenied(false)}
+          title="Hours Access Restricted"
+          message="You need enhanced access to view the hours tracking page. Register with a valid token to get enhanced access, or contact an administrator."
         />
       )}
     </>
