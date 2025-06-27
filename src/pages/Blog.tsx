@@ -1,133 +1,92 @@
-import React, { useState } from 'react';
-import { Calendar, Clock, Plus } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Calendar, Clock, Plus, Edit, Trash2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { blogAPI, BlogPost } from '../lib/supabase';
 import BlogModal, { BlogPostData } from '../components/BlogModal';
 import CommentSystem from '../components/CommentSystem';
 
-interface BlogPost {
-  id: number;
-  title: string;
-  content: string;
-  timestamp: string;
-}
-
 const Blog: React.FC = () => {
-  const { isAdmin } = useAuth();
-  const [posts, setPosts] = useState<BlogPost[]>([
-    {
-      id: 1,
-      title: 'Welcome to My Blog',
-      content: `Welcome to my personal blog! This is where I'll be sharing my thoughts, experiences, and insights about technology, software development, and life in general.
-
-I'm excited to start this journey of documenting my learning process and sharing knowledge with the community. You can expect posts about:
-
-- Software development best practices
-- New technologies I'm exploring
-- Project updates and lessons learned
-- Personal reflections on the tech industry
-
-Stay tuned for more content coming soon!
-
-![Welcome Image](https://images.pexels.com/photos/1181671/pexels-photo-1181671.jpeg?auto=compress&cs=tinysrgb&w=800)
-
-Thank you for visiting, and I hope you find the content valuable and engaging.`,
-      timestamp: '2025-01-15T10:30:00Z'
-    },
-    {
-      id: 2,
-      title: 'Building Modern Web Applications',
-      content: `In today's fast-paced digital world, building modern web applications requires a deep understanding of both frontend and backend technologies. Let me share some insights from my recent projects.
-
-## Key Technologies I'm Using
-
-### Frontend
-- **React**: For building interactive user interfaces
-- **TypeScript**: For type-safe development
-- **Tailwind CSS**: For rapid UI development
-
-### Backend
-- **Node.js**: For server-side development
-- **PostgreSQL**: For robust data storage
-- **Docker**: For containerization and deployment
-
-## Best Practices
-
-1. **Component-Based Architecture**: Breaking down the UI into reusable components
-2. **State Management**: Using proper state management patterns
-3. **Performance Optimization**: Implementing lazy loading and code splitting
-4. **Testing**: Writing comprehensive unit and integration tests
-
-![Development Setup](https://images.pexels.com/photos/574071/pexels-photo-574071.jpeg?auto=compress&cs=tinysrgb&w=800)
-
-The key to successful web development is staying updated with the latest trends while maintaining a solid foundation in core principles.`,
-      timestamp: '2025-01-10T14:45:00Z'
-    },
-    {
-      id: 3,
-      title: 'The Future of AI in Software Development',
-      content: `Artificial Intelligence is revolutionizing the way we approach software development. From code generation to automated testing, AI tools are becoming indispensable for modern developers.
-
-## Current AI Tools in Development
-
-- **GitHub Copilot**: AI-powered code completion
-- **ChatGPT**: For problem-solving and code explanation
-- **Automated Testing**: AI-driven test case generation
-
-## Impact on Developers
-
-While some fear that AI might replace developers, I believe it will augment our capabilities rather than replace us. AI handles repetitive tasks, allowing us to focus on:
-
-- Creative problem solving
-- System architecture design
-- User experience optimization
-- Strategic decision making
-
-![AI Technology](https://images.pexels.com/photos/8386440/pexels-photo-8386440.jpeg?auto=compress&cs=tinysrgb&w=800)
-
-The future belongs to developers who can effectively collaborate with AI tools to build better software faster.`,
-      timestamp: '2025-01-05T09:15:00Z'
-    }
-  ]);
-
-  const [expandedPost, setExpandedPost] = useState<number | null>(null);
+  const { user, isAdmin } = useAuth();
+  const [posts, setPosts] = useState<BlogPost[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [expandedPost, setExpandedPost] = useState<string | null>(null);
   const [showBlogModal, setShowBlogModal] = useState(false);
   const [editingPost, setEditingPost] = useState<BlogPost | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [error, setError] = useState<string | null>(null);
   const postsPerPage = 5;
 
-  // Sort posts by timestamp (newest first)
-  const sortedPosts = [...posts].sort((a, b) => 
-    new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-  );
+  useEffect(() => {
+    loadPosts();
+  }, [user]);
 
-  // Pagination
-  const totalPages = Math.ceil(sortedPosts.length / postsPerPage);
-  const startIndex = (currentPage - 1) * postsPerPage;
-  const currentPosts = sortedPosts.slice(startIndex, startIndex + postsPerPage);
-
-  const handlePostClick = (postId: number) => {
-    setExpandedPost(expandedPost === postId ? null : postId);
-  };
-
-  const handleCreatePost = (postData: BlogPostData) => {
-    const newPost: BlogPost = {
-      id: Date.now(),
-      title: postData.title,
-      content: postData.content,
-      timestamp: new Date().toISOString()
-    };
-    setPosts([newPost, ...posts]);
-  };
-
-  const handleEditPost = (postData: BlogPostData) => {
-    if (postData.id) {
-      setPosts(posts.map(post => 
-        post.id === postData.id 
-          ? { ...post, title: postData.title, content: postData.content }
-          : post
-      ));
+  const loadPosts = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await blogAPI.getAll(isAdmin ? user?.id : undefined);
+      setPosts(data || []);
+    } catch (err) {
+      console.error('Error loading posts:', err);
+      setError('Failed to load blog posts');
+    } finally {
+      setLoading(false);
     }
-    setEditingPost(null);
+  };
+
+  const handleCreatePost = async (postData: BlogPostData) => {
+    if (!user) return;
+
+    try {
+      const newPost = await blogAPI.create({
+        user_id: user.id,
+        title: postData.title,
+        content: postData.content,
+        published: true
+      });
+      
+      setPosts([newPost, ...posts]);
+      setShowBlogModal(false);
+    } catch (err) {
+      console.error('Error creating post:', err);
+      setError('Failed to create blog post');
+    }
+  };
+
+  const handleEditPost = async (postData: BlogPostData) => {
+    if (!editingPost) return;
+
+    try {
+      const updatedPost = await blogAPI.update(editingPost.id, {
+        title: postData.title,
+        content: postData.content
+      });
+      
+      setPosts(posts.map(post => 
+        post.id === editingPost.id ? updatedPost : post
+      ));
+      setEditingPost(null);
+      setShowBlogModal(false);
+    } catch (err) {
+      console.error('Error updating post:', err);
+      setError('Failed to update blog post');
+    }
+  };
+
+  const handleDeletePost = async (postId: string) => {
+    if (!confirm('Are you sure you want to delete this post?')) return;
+
+    try {
+      await blogAPI.delete(postId);
+      setPosts(posts.filter(post => post.id !== postId));
+    } catch (err) {
+      console.error('Error deleting post:', err);
+      setError('Failed to delete blog post');
+    }
+  };
+
+  const handlePostClick = (postId: string) => {
+    setExpandedPost(expandedPost === postId ? null : postId);
   };
 
   const formatDate = (timestamp: string) => {
@@ -150,10 +109,8 @@ The future belongs to developers who can effectively collaborate with AI tools t
 
   const renderContent = (content: string, isExpanded: boolean) => {
     if (isExpanded) {
-      // Render full content with images
       return content.split('\n').map((paragraph, index) => {
         if (paragraph.startsWith('![') && paragraph.includes('](')) {
-          // Handle image markdown
           const match = paragraph.match(/!\[([^\]]*)\]\(([^)]+)\)/);
           if (match) {
             return (
@@ -198,11 +155,27 @@ The future belongs to developers who can effectively collaborate with AI tools t
         }
       });
     } else {
-      // Show preview (first 150 characters)
       const plainText = content.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '').replace(/\*\*(.*?)\*\*/g, '$1').replace(/##\s/g, '');
       return plainText.length > 150 ? plainText.substring(0, 150) + '...' : plainText;
     }
   };
+
+  // Pagination
+  const totalPages = Math.ceil(posts.length / postsPerPage);
+  const startIndex = (currentPage - 1) * postsPerPage;
+  const currentPosts = posts.slice(startIndex, startIndex + postsPerPage);
+
+  if (loading) {
+    return (
+      <div className="blog-page">
+        <div className="blog-container">
+          <div className="flex items-center justify-center h-64">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="blog-page">
@@ -214,56 +187,94 @@ The future belongs to developers who can effectively collaborate with AI tools t
           </p>
         </div>
 
-        <div className="blog-posts">
-          {currentPosts.map((post) => (
-            <article 
-              key={post.id} 
-              className={`blog-post ${expandedPost === post.id ? 'expanded' : ''} interactive`}
-              onClick={() => handlePostClick(post.id)}
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+            <p className="text-red-800">{error}</p>
+            <button 
+              onClick={() => setError(null)}
+              className="text-red-600 hover:text-red-800 text-sm mt-2"
             >
-              <div className="post-header">
-                <h2 className="post-title">{post.title}</h2>
-                <div className="post-date">
-                  <Calendar size={16} />
-                  <span>{formatDate(post.timestamp)}</span>
-                  <Clock size={16} />
-                  <span>{formatTime(post.timestamp)}</span>
-                </div>
-              </div>
-              
-              <div className="post-content">
-                {renderContent(post.content, expandedPost === post.id)}
-              </div>
+              Dismiss
+            </button>
+          </div>
+        )}
 
-              {expandedPost !== post.id && (
-                <button className="read-more">
-                  Read more
+        <div className="blog-posts">
+          {currentPosts.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-gray-500 text-lg mb-4">No blog posts yet</p>
+              {isAdmin && (
+                <button
+                  onClick={() => setShowBlogModal(true)}
+                  className="text-blue-600 hover:text-blue-700 transition-colors"
+                >
+                  Create your first post
                 </button>
               )}
-
-              {expandedPost === post.id && (
-                <div>
-                  {isAdmin && (
-                    <div className="mt-4 pt-4 border-t border-gray-200">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEditingPost(post);
-                          setShowBlogModal(true);
-                        }}
-                        className="text-sm bg-gray-100 hover:bg-gray-200 px-3 py-1 rounded transition-colors"
-                      >
-                        Edit Post
-                      </button>
+            </div>
+          ) : (
+            currentPosts.map((post) => (
+              <article 
+                key={post.id} 
+                className={`blog-post ${expandedPost === post.id ? 'expanded' : ''} interactive`}
+                onClick={() => handlePostClick(post.id)}
+              >
+                <div className="post-header">
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <h2 className="post-title">{post.title}</h2>
+                      <div className="post-date">
+                        <Calendar size={16} />
+                        <span>{formatDate(post.created_at)}</span>
+                        <Clock size={16} />
+                        <span>{formatTime(post.created_at)}</span>
+                      </div>
                     </div>
-                  )}
-                  
-                  {/* Comments Section */}
-                  <CommentSystem postId={post.id} />
+                    
+                    {isAdmin && (
+                      <div className="flex space-x-2 ml-4">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingPost(post);
+                            setShowBlogModal(true);
+                          }}
+                          className="p-2 text-gray-400 hover:text-blue-600 transition-colors"
+                          title="Edit post"
+                        >
+                          <Edit size={16} />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeletePost(post.id);
+                          }}
+                          className="p-2 text-gray-400 hover:text-red-600 transition-colors"
+                          title="Delete post"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              )}
-            </article>
-          ))}
+                
+                <div className="post-content">
+                  {renderContent(post.content, expandedPost === post.id)}
+                </div>
+
+                {expandedPost !== post.id && (
+                  <button className="read-more">
+                    Read more
+                  </button>
+                )}
+
+                {expandedPost === post.id && (
+                  <CommentSystem postId={parseInt(post.id.replace(/-/g, '').substring(0, 8), 16)} />
+                )}
+              </article>
+            ))
+          )}
         </div>
 
         {totalPages > 1 && (
@@ -301,7 +312,12 @@ The future belongs to developers who can effectively collaborate with AI tools t
             setEditingPost(null);
           }}
           onSave={editingPost ? handleEditPost : handleCreatePost}
-          editPost={editingPost}
+          editPost={editingPost ? {
+            id: parseInt(editingPost.id.replace(/-/g, '').substring(0, 8), 16),
+            title: editingPost.title,
+            content: editingPost.content,
+            timestamp: editingPost.created_at
+          } : null}
         />
       )}
     </div>

@@ -5,6 +5,7 @@ import { supabase, UserStatistics, Subject, Achievement, WorkEntry } from '../li
 import WorkEntryModal, { WorkEntryData } from '../components/WorkEntryModal';
 import SubjectModal, { SubjectData } from '../components/SubjectModal';
 import AchievementModal, { AchievementData } from '../components/AchievementModal';
+import AnnualHoursChart from '../components/AnnualHoursChart';
 
 const Hours: React.FC = () => {
   const { user, isAdmin } = useAuth();
@@ -13,6 +14,7 @@ const Hours: React.FC = () => {
   const [achievements, setAchievements] = useState<Achievement[]>([]);
   const [workEntries, setWorkEntries] = useState<WorkEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [chartUpdateTrigger, setChartUpdateTrigger] = useState(0);
 
   // Modal states
   const [showWorkModal, setShowWorkModal] = useState(false);
@@ -121,6 +123,7 @@ const Hours: React.FC = () => {
         setWorkEntries([data, ...workEntries]);
         await updateStatistics();
         await updateSubjectProgress(entryData.subject_id, entryData.hours);
+        setChartUpdateTrigger(prev => prev + 1); // Trigger chart update
       }
     } catch (error) {
       console.error('Error creating work entry:', error);
@@ -158,6 +161,7 @@ const Hours: React.FC = () => {
         ));
         await updateStatistics();
         setEditingEntry(null);
+        setChartUpdateTrigger(prev => prev + 1); // Trigger chart update
       }
     } catch (error) {
       console.error('Error updating work entry:', error);
@@ -546,6 +550,11 @@ const Hours: React.FC = () => {
               )}
             </div>
           </div>
+        </div>
+
+        {/* Annual Hours Chart */}
+        <div className="mb-12">
+          <AnnualHoursChart onDataUpdate={() => chartUpdateTrigger} />
         </div>
 
         {/* Achievements Section */}
