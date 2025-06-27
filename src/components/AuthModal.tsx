@@ -79,10 +79,8 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
 
       if (success) {
         console.log('🎉 Auth successful, calling onAuthSuccess');
-        // Add a small delay to allow auth state to update
-        setTimeout(() => {
-          onAuthSuccess();
-        }, 1000);
+        // Close modal immediately on success
+        onAuthSuccess();
       }
     } catch (err: any) {
       console.error('❌ Auth error in modal:', err);
@@ -235,9 +233,6 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
           {error && (
             <div className="error-message">
               {error}
-              <div className="text-xs mt-1 text-gray-600">
-                Check the browser console (F12) for detailed error information.
-              </div>
             </div>
           )}
           

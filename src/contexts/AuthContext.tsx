@@ -60,13 +60,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     let mounted = true;
     let loadingTimeout: NodeJS.Timeout;
 
-    // Set a maximum loading time of 5 seconds (reduced from 8)
+    // Set a maximum loading time of 3 seconds (reduced further)
     loadingTimeout = setTimeout(() => {
       if (mounted) {
         console.log('🚨 Auth loading timeout reached, setting loading to false');
         setLoading(false);
       }
-    }, 5000);
+    }, 3000);
 
     // Get initial session
     const getInitialSession = async () => {
@@ -148,55 +148,34 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const profileTimeout = setTimeout(() => {
       console.log('⏰ Profile loading timeout, creating fallback user');
       createFallbackUser(authUser);
-    }, 3000); // 3 second timeout for profile loading
+    }, 2000); // Reduced to 2 seconds
 
     try {
       console.log('👤 Loading profile for user:', authUser.email);
       console.log('🆔 User ID:', authUser.id);
       
-      // Test basic connectivity first
-      console.log('🔍 Testing database connectivity...');
-      const { data: testData, error: testError } = await supabase
-        .from('user_profiles')
-        .select('count')
-        .limit(1);
-      
-      if (testError) {
-        console.error('❌ Database connectivity test failed:', testError);
-        clearTimeout(profileTimeout);
-        createFallbackUser(authUser);
-        return;
-      }
-      
-      console.log('✅ Database connectivity test passed');
-      
-      // Try to load the user profile with a timeout
+      // Skip database connectivity test for now and go straight to profile loading
       console.log('📋 Querying user_profiles table...');
-      const { data: profile, error } = await supabase
+      
+      // Use a Promise.race to implement our own timeout
+      const profileQuery = supabase
         .from('user_profiles')
         .select('*')
         .eq('id', authUser.id)
-        .maybeSingle(); // Use maybeSingle instead of single to avoid errors when no row exists
+        .maybeSingle();
+
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Query timeout')), 1500);
+      });
+
+      const { data: profile, error } = await Promise.race([profileQuery, timeoutPromise]) as any;
 
       clearTimeout(profileTimeout);
 
       if (error) {
         console.error('❌ Error loading user profile:', error);
-        console.error('Error details:', {
-          code: error.code,
-          message: error.message,
-          details: error.details,
-          hint: error.hint
-        });
         
-        // Try to create profile if it doesn't exist
-        if (error.code === 'PGRST116' || error.message?.includes('No rows found')) {
-          console.log('🔧 Profile not found, attempting to create...');
-          await createUserProfile(authUser);
-          return;
-        }
-        
-        // For other errors, create fallback user
+        // For any error, create fallback user immediately
         console.log('⚠️ Creating fallback user due to profile error');
         createFallbackUser(authUser);
         return;
@@ -218,8 +197,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           isRegular: profile.role === 'regular'
         });
       } else {
-        console.log('⚠️ No profile found, creating new profile...');
-        await createUserProfile(authUser);
+        console.log('⚠️ No profile found, creating fallback user...');
+        createFallbackUser(authUser);
       }
     } catch (error) {
       clearTimeout(profileTimeout);
@@ -238,85 +217,59 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.log('👑 Admin role assigned to fallback user');
     }
 
-    setUser({
+    const newUser = {
       id: authUser.id,
       email: authUser.email || '',
       role: role,
       isAdmin: role === 'admin',
       isSpecialized: role === 'specialized',
       isRegular: role === 'regular'
-    });
+    };
+
+    setUser(newUser);
+    console.log('✅ Fallback user created successfully:', newUser);
     
-    console.log('✅ Fallback user created successfully');
+    // Try to create the profile in the background (don't wait for it)
+    createUserProfileBackground(authUser, role);
   };
 
-  const createUserProfile = async (authUser: SupabaseUser) => {
+  const createUserProfileBackground = async (authUser: SupabaseUser, role: 'admin' | 'regular' | 'specialized') => {
     try {
-      console.log('🔧 Creating user profile for:', authUser.email);
+      console.log('🔧 Creating user profile in background for:', authUser.email);
       
-      // Determine role based on email
-      let role: 'admin' | 'regular' | 'specialized' = 'regular';
-      if (['rishabh.biry@gmail.com', 'biryrishabh01@gmail.com', 'biryrishabh@gmail.com'].includes(authUser.email || '')) {
-        role = 'admin';
-        console.log('👑 Admin role assigned');
-      }
-
-      console.log('📝 Inserting profile into database...');
-      const { data: profile, error } = await supabase
+      const { error } = await supabase
         .from('user_profiles')
-        .insert([{
+        .upsert({
           id: authUser.id,
           email: authUser.email || '',
           role: role
-        }])
-        .select()
-        .single();
+        }, {
+          onConflict: 'id'
+        });
 
       if (error) {
-        console.error('❌ Error creating user profile:', error);
-        console.error('Error details:', {
-          code: error.code,
-          message: error.message,
-          details: error.details,
-          hint: error.hint
-        });
-        
-        // Create fallback user if profile creation fails
-        createFallbackUser(authUser);
-        return;
-      }
-
-      if (profile) {
-        console.log('✅ Profile created successfully:', {
-          email: profile.email,
-          role: profile.role,
-          id: profile.id
-        });
-        setUserProfile(profile);
-        setUser({
-          id: profile.id,
-          email: profile.email,
-          role: profile.role,
-          isAdmin: profile.role === 'admin',
-          isSpecialized: profile.role === 'specialized',
-          isRegular: profile.role === 'regular'
-        });
+        console.error('❌ Background profile creation failed:', error);
+      } else {
+        console.log('✅ Background profile created successfully');
       }
     } catch (error) {
-      console.error('❌ Error creating user profile:', error);
-      createFallbackUser(authUser);
+      console.error('❌ Error in background profile creation:', error);
     }
   };
 
   const validateToken = async (token: string): Promise<boolean> => {
     try {
       console.log('🔍 Validating token:', token.substring(0, 5) + '...');
-      const { data, error } = await supabase
-        .from('user_tokens')
-        .select('*')
-        .eq('token', token)
-        .eq('is_active', true)
-        .single();
+      
+      const { data, error } = await Promise.race([
+        supabase
+          .from('user_tokens')
+          .select('*')
+          .eq('token', token)
+          .eq('is_active', true)
+          .single(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Token validation timeout')), 3000))
+      ]) as any;
 
       const isValid = !error && !!data;
       console.log('🎫 Token validation result:', isValid);
@@ -343,7 +296,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (data.user) {
         console.log('✅ Login successful, user:', data.user.email);
-        console.log('📧 User confirmation status:', data.user.email_confirmed_at ? 'confirmed' : 'not confirmed');
         
         // The auth state change handler will load the profile
         return true;
@@ -398,17 +350,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (data.user) {
         console.log('✅ Registration successful, user:', data.user.email);
-        console.log('📧 User ID:', data.user.id);
-        console.log('📧 Email confirmation required:', !data.user.email_confirmed_at);
-        
-        // If email confirmation is not required, the user should be signed in
-        if (data.user.email_confirmed_at || data.session) {
-          console.log('🎉 User is immediately available, no email confirmation needed');
-          return true;
-        } else {
-          console.log('📧 Email confirmation may be required');
-          return true; // Still consider it successful
-        }
+        return true;
       }
 
       console.log('⚠️ Registration returned no user');
