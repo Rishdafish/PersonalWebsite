@@ -5,10 +5,10 @@ import { Header } from './components/Header';
 import { Footer } from './components/Footer';
 import { StarField } from './components/StarField';
 import { ConnectionErrorBanner } from './components/ConnectionErrorBanner';
-import { Home } from './pages/Home';
-import { Blog } from './pages/Blog';
-import { Projects } from './pages/Projects';
-import { Hours } from './pages/Hours';
+import Home from './pages/Home';
+import Blog from './pages/Blog';
+import Projects from './pages/Projects';
+import Hours from './pages/Hours';
 import './App.css';
 
 function App() {
