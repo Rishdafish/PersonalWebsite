@@ -241,7 +241,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           .select('*')
           .eq('id', authUser.id)
           .maybeSingle(),
-        3000,
+        8000,
         'Profile loading timeout'
       );
 
