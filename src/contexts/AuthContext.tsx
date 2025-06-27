@@ -60,38 +60,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     let mounted = true;
     let loadingTimeout: NodeJS.Timeout;
 
-    // Set a maximum loading time of 8 seconds
+    // Set a maximum loading time of 5 seconds (reduced from 8)
     loadingTimeout = setTimeout(() => {
       if (mounted) {
         console.log('🚨 Auth loading timeout reached, setting loading to false');
         setLoading(false);
       }
-    }, 8000);
+    }, 5000);
 
     // Get initial session
     const getInitialSession = async () => {
       try {
         console.log('🔍 Getting initial session...');
         
-        // Test Supabase connection first
-        const { data: testData, error: testError } = await supabase
-          .from('user_tokens')
-          .select('count')
-          .limit(1);
-        
-        if (testError) {
-          console.error('❌ Supabase connection test failed:', testError);
-          throw new Error('Database connection failed');
-        }
-        
-        console.log('✅ Supabase connection test passed');
-        
         const { data: { session }, error } = await supabase.auth.getSession();
         
         if (error) {
           console.error('❌ Error getting session:', error);
-          // Clear any invalid session data
-          await supabase.auth.signOut();
           if (mounted) {
             setUser(null);
             setUserProfile(null);
@@ -160,60 +145,69 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, []);
 
   const loadUserProfile = async (authUser: SupabaseUser) => {
+    const profileTimeout = setTimeout(() => {
+      console.log('⏰ Profile loading timeout, creating fallback user');
+      createFallbackUser(authUser);
+    }, 3000); // 3 second timeout for profile loading
+
     try {
       console.log('👤 Loading profile for user:', authUser.email);
+      console.log('🆔 User ID:', authUser.id);
       
-      // First check if user_profiles table exists and is accessible
-      const { data: tableCheck, error: tableError } = await supabase
+      // Test basic connectivity first
+      console.log('🔍 Testing database connectivity...');
+      const { data: testData, error: testError } = await supabase
         .from('user_profiles')
         .select('count')
         .limit(1);
       
-      if (tableError) {
-        console.error('❌ user_profiles table access error:', tableError);
-        // Create a fallback user if table doesn't exist
-        setUser({
-          id: authUser.id,
-          email: authUser.email || '',
-          role: 'regular',
-          isAdmin: false,
-          isSpecialized: false,
-          isRegular: true
-        });
+      if (testError) {
+        console.error('❌ Database connectivity test failed:', testError);
+        clearTimeout(profileTimeout);
+        createFallbackUser(authUser);
         return;
       }
       
+      console.log('✅ Database connectivity test passed');
+      
+      // Try to load the user profile with a timeout
+      console.log('📋 Querying user_profiles table...');
       const { data: profile, error } = await supabase
         .from('user_profiles')
         .select('*')
         .eq('id', authUser.id)
-        .single();
+        .maybeSingle(); // Use maybeSingle instead of single to avoid errors when no row exists
+
+      clearTimeout(profileTimeout);
 
       if (error) {
         console.error('❌ Error loading user profile:', error);
+        console.error('Error details:', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint
+        });
         
-        // If profile doesn't exist, try to create it
-        if (error.code === 'PGRST116') {
-          console.log('🔧 Profile not found, creating...');
+        // Try to create profile if it doesn't exist
+        if (error.code === 'PGRST116' || error.message?.includes('No rows found')) {
+          console.log('🔧 Profile not found, attempting to create...');
           await createUserProfile(authUser);
           return;
         }
         
-        // For other errors, set a default user
-        console.log('⚠️ Setting default user due to profile error');
-        setUser({
-          id: authUser.id,
-          email: authUser.email || '',
-          role: 'regular',
-          isAdmin: false,
-          isSpecialized: false,
-          isRegular: true
-        });
+        // For other errors, create fallback user
+        console.log('⚠️ Creating fallback user due to profile error');
+        createFallbackUser(authUser);
         return;
       }
 
       if (profile) {
-        console.log('✅ Profile loaded successfully:', profile.email, profile.role);
+        console.log('✅ Profile loaded successfully:', {
+          email: profile.email,
+          role: profile.role,
+          id: profile.id
+        });
         setUserProfile(profile);
         setUser({
           id: profile.id,
@@ -223,19 +217,37 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           isSpecialized: profile.role === 'specialized',
           isRegular: profile.role === 'regular'
         });
+      } else {
+        console.log('⚠️ No profile found, creating new profile...');
+        await createUserProfile(authUser);
       }
     } catch (error) {
+      clearTimeout(profileTimeout);
       console.error('❌ Error in loadUserProfile:', error);
-      // Set a fallback user to prevent infinite loading
-      setUser({
-        id: authUser.id,
-        email: authUser.email || '',
-        role: 'regular',
-        isAdmin: false,
-        isSpecialized: false,
-        isRegular: true
-      });
+      createFallbackUser(authUser);
     }
+  };
+
+  const createFallbackUser = (authUser: SupabaseUser) => {
+    console.log('🔧 Creating fallback user for:', authUser.email);
+    
+    // Determine role based on email
+    let role: 'admin' | 'regular' | 'specialized' = 'regular';
+    if (['rishabh.biry@gmail.com', 'biryrishabh01@gmail.com', 'biryrishabh@gmail.com'].includes(authUser.email || '')) {
+      role = 'admin';
+      console.log('👑 Admin role assigned to fallback user');
+    }
+
+    setUser({
+      id: authUser.id,
+      email: authUser.email || '',
+      role: role,
+      isAdmin: role === 'admin',
+      isSpecialized: role === 'specialized',
+      isRegular: role === 'regular'
+    });
+    
+    console.log('✅ Fallback user created successfully');
   };
 
   const createUserProfile = async (authUser: SupabaseUser) => {
@@ -249,6 +261,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         console.log('👑 Admin role assigned');
       }
 
+      console.log('📝 Inserting profile into database...');
       const { data: profile, error } = await supabase
         .from('user_profiles')
         .insert([{
@@ -261,20 +274,24 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (error) {
         console.error('❌ Error creating user profile:', error);
-        // Set a fallback user even if profile creation fails
-        setUser({
-          id: authUser.id,
-          email: authUser.email || '',
-          role: role,
-          isAdmin: role === 'admin',
-          isSpecialized: role === 'specialized',
-          isRegular: role === 'regular'
+        console.error('Error details:', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint
         });
+        
+        // Create fallback user if profile creation fails
+        createFallbackUser(authUser);
         return;
       }
 
       if (profile) {
-        console.log('✅ Profile created successfully:', profile.email, profile.role);
+        console.log('✅ Profile created successfully:', {
+          email: profile.email,
+          role: profile.role,
+          id: profile.id
+        });
         setUserProfile(profile);
         setUser({
           id: profile.id,
@@ -287,15 +304,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
     } catch (error) {
       console.error('❌ Error creating user profile:', error);
-      // Set a fallback user
-      setUser({
-        id: authUser.id,
-        email: authUser.email || '',
-        role: 'regular',
-        isAdmin: false,
-        isSpecialized: false,
-        isRegular: true
-      });
+      createFallbackUser(authUser);
     }
   };
 
