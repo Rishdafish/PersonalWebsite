@@ -410,34 +410,8 @@ const Hours: React.FC = () => {
     return last7Days;
   };
 
-  // Generate monthly chart data for 2025
-  const generateMonthlyChartData = () => {
-    const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-    ];
-    
-    const monthlyData = months.map((month, index) => {
-      const monthEntries = workEntries.filter(entry => {
-        const entryDate = new Date(entry.entry_date);
-        return entryDate.getMonth() === index && entryDate.getFullYear() === 2025;
-      });
-      
-      const totalHours = monthEntries.reduce((sum, entry) => sum + entry.hours, 0);
-      
-      return {
-        month,
-        hours: totalHours
-      };
-    });
-    
-    return monthlyData;
-  };
-
   const chartData = generateChartData();
-  const monthlyChartData = generateMonthlyChartData();
   const maxChartHours = Math.max(...chartData.map(d => d.hours), 1);
-  const maxMonthlyHours = Math.max(...monthlyChartData.map(d => d.hours), 1);
 
   // Pagination for recent entries
   const totalPages = Math.ceil(workEntries.length / entriesPerPage);
@@ -532,7 +506,7 @@ const Hours: React.FC = () => {
           </div>
         </div>
 
-        {/* Daily Work Hours Line Graph */}
+        {/* Daily Work Hours Line Graph - Replaces Monthly Hours */}
         <DailyHoursLineGraph 
           workEntries={workEntries} 
           className="mb-12"
@@ -624,25 +598,6 @@ const Hours: React.FC = () => {
                 })
               )}
             </div>
-          </div>
-        </div>
-
-        {/* Monthly Hours Chart */}
-        <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 mb-12">
-          <h3 className="text-xl font-semibold text-gray-900 mb-6">Monthly Hours (2025)</h3>
-          <div className="space-y-4">
-            {monthlyChartData.map((month, index) => (
-              <div key={index} className="flex items-center space-x-4">
-                <div className="w-12 text-sm font-medium text-gray-600">{month.month}</div>
-                <div className="flex-1 bg-gray-200 rounded-full h-6 relative">
-                  <div 
-                    className="bg-gradient-to-r from-blue-500 to-purple-500 h-6 rounded-full transition-all duration-500"
-                    style={{ width: `${maxMonthlyHours > 0 ? (month.hours / maxMonthlyHours) * 100 : 0}%` }}
-                  ></div>
-                </div>
-                <div className="w-12 text-sm font-semibold text-gray-900">{month.hours}h</div>
-              </div>
-            ))}
           </div>
         </div>
 

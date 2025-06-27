@@ -12,7 +12,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [token, setToken] = useState('hello_1210');
+  const [token, setToken] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState('');
@@ -104,7 +104,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
     setEmail('');
     setPassword('');
     setConfirmPassword('');
-    setToken('hello_1210');
+    setToken(''); // Empty token by default
     setError('');
     setTokenValidated(null);
     setShowPassword(false);
@@ -187,7 +187,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
               <div className="relative">
                 <input
                   type="text"
-                  placeholder="Specialized Access Token"
+                  placeholder="Specialized Access Token (Optional)"
                   value={token}
                   onChange={(e) => {
                     setToken(e.target.value);

@@ -6,10 +6,12 @@ interface DailyHoursLineGraphProps {
   className?: string;
 }
 
-interface DataPoint {
-  date: string;
-  hours: number;
-  formattedDate: string;
+interface MonthlyDataPoint {
+  month: string;
+  monthIndex: number;
+  totalHours: number;
+  daysWorked: number;
+  averageHours: number;
 }
 
 const DailyHoursLineGraph: React.FC<DailyHoursLineGraphProps> = ({ 
@@ -17,30 +19,35 @@ const DailyHoursLineGraph: React.FC<DailyHoursLineGraphProps> = ({
   className = '' 
 }) => {
   const chartData = useMemo(() => {
-    // Group entries by date and sum hours
-    const dailyTotals = workEntries.reduce((acc, entry) => {
-      const date = entry.entry_date;
-      acc[date] = (acc[date] || 0) + entry.hours;
-      return acc;
-    }, {} as Record<string, number>);
+    const currentYear = new Date().getFullYear();
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
 
-    // Convert to array and sort by date
-    const dataPoints: DataPoint[] = Object.entries(dailyTotals)
-      .map(([date, hours]) => ({
-        date,
-        hours,
-        formattedDate: new Date(date).toLocaleDateString('en-US', {
-          month: '2-digit',
-          day: '2-digit',
-          year: 'numeric'
-        })
-      }))
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    // Group entries by month and calculate totals
+    const monthlyData: MonthlyDataPoint[] = months.map((month, index) => {
+      const monthEntries = workEntries.filter(entry => {
+        const entryDate = new Date(entry.entry_date);
+        return entryDate.getMonth() === index && entryDate.getFullYear() === currentYear;
+      });
 
-    return dataPoints;
+      const totalHours = monthEntries.reduce((sum, entry) => sum + entry.hours, 0);
+      const uniqueDays = new Set(monthEntries.map(entry => entry.entry_date)).size;
+
+      return {
+        month,
+        monthIndex: index,
+        totalHours,
+        daysWorked: uniqueDays,
+        averageHours: uniqueDays > 0 ? totalHours / uniqueDays : 0
+      };
+    });
+
+    return monthlyData;
   }, [workEntries]);
 
-  if (chartData.length === 0) {
+  if (chartData.every(d => d.totalHours === 0)) {
     return (
       <div className={`bg-white rounded-2xl p-6 shadow-lg border border-gray-100 ${className}`}>
         <h3 className="text-xl font-semibold text-gray-900 mb-6">Daily Work Hours</h3>
@@ -59,7 +66,7 @@ const DailyHoursLineGraph: React.FC<DailyHoursLineGraphProps> = ({
   const innerHeight = chartHeight - padding.top - padding.bottom;
 
   // Calculate scales
-  const maxHours = Math.max(...chartData.map(d => d.hours), 24);
+  const maxHours = Math.max(...chartData.map(d => d.totalHours), 10);
   const minHours = 0;
   const hoursRange = maxHours - minHours;
 
@@ -71,7 +78,7 @@ const DailyHoursLineGraph: React.FC<DailyHoursLineGraphProps> = ({
   const linePath = chartData
     .map((point, index) => {
       const x = xScale(index);
-      const y = yScale(point.hours);
+      const y = yScale(point.totalHours);
       return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
     })
     .join(' ');
@@ -81,7 +88,7 @@ const DailyHoursLineGraph: React.FC<DailyHoursLineGraphProps> = ({
   const verticalGridLines = [];
   
   // Horizontal grid lines (hours)
-  const hourStep = Math.ceil(maxHours / 8);
+  const hourStep = Math.max(1, Math.ceil(maxHours / 8));
   for (let i = 0; i <= maxHours; i += hourStep) {
     const y = yScale(i);
     horizontalGridLines.push(
@@ -107,12 +114,11 @@ const DailyHoursLineGraph: React.FC<DailyHoursLineGraphProps> = ({
     );
   }
 
-  // Vertical grid lines (dates) - show every few dates to avoid crowding
-  const dateStep = Math.max(1, Math.floor(chartData.length / 8));
-  for (let i = 0; i < chartData.length; i += dateStep) {
-    const x = xScale(i);
+  // Vertical grid lines (months)
+  chartData.forEach((point, index) => {
+    const x = xScale(index);
     verticalGridLines.push(
-      <g key={`v-grid-${i}`}>
+      <g key={`v-grid-${index}`}>
         <line
           x1={x}
           y1={0}
@@ -127,13 +133,12 @@ const DailyHoursLineGraph: React.FC<DailyHoursLineGraphProps> = ({
           y={innerHeight + 20}
           textAnchor="middle"
           className="text-xs fill-gray-600"
-          transform={`rotate(-45, ${x}, ${innerHeight + 20})`}
         >
-          {chartData[i].formattedDate}
+          {point.month}
         </text>
       </g>
     );
-  }
+  });
 
   return (
     <div className={`bg-white rounded-2xl p-6 shadow-lg border border-gray-100 ${className}`}>
@@ -177,37 +182,45 @@ const DailyHoursLineGraph: React.FC<DailyHoursLineGraphProps> = ({
             {/* Data points */}
             {chartData.map((point, index) => {
               const x = xScale(index);
-              const y = yScale(point.hours);
+              const y = yScale(point.totalHours);
               
               return (
                 <g key={`point-${index}`}>
                   <circle
                     cx={x}
                     cy={y}
-                    r={4}
-                    fill="#3b82f6"
+                    r={point.totalHours > 0 ? 5 : 3}
+                    fill={point.totalHours > 0 ? "#3b82f6" : "#d1d5db"}
                     stroke="white"
                     strokeWidth={2}
-                    className="hover:r-6 transition-all cursor-pointer"
+                    className="hover:r-7 transition-all cursor-pointer"
                   />
                   
                   {/* Tooltip on hover */}
                   <g className="opacity-0 hover:opacity-100 transition-opacity pointer-events-none">
                     <rect
-                      x={x - 35}
-                      y={y - 35}
-                      width={70}
-                      height={25}
+                      x={x - 45}
+                      y={y - 50}
+                      width={90}
+                      height={40}
                       fill="rgba(0, 0, 0, 0.8)"
                       rx={4}
                     />
+                    <text
+                      x={x}
+                      y={y - 32}
+                      textAnchor="middle"
+                      className="text-xs fill-white"
+                    >
+                      {point.month}: {point.totalHours}h
+                    </text>
                     <text
                       x={x}
                       y={y - 18}
                       textAnchor="middle"
                       className="text-xs fill-white"
                     >
-                      {point.hours}h
+                      {point.daysWorked} days worked
                     </text>
                   </g>
                 </g>
@@ -222,7 +235,7 @@ const DailyHoursLineGraph: React.FC<DailyHoursLineGraphProps> = ({
             textAnchor="middle"
             className="text-sm font-medium fill-gray-700"
           >
-            Date (MM/DD/YYYY)
+            Month
           </text>
           
           <text
@@ -232,7 +245,7 @@ const DailyHoursLineGraph: React.FC<DailyHoursLineGraphProps> = ({
             className="text-sm font-medium fill-gray-700"
             transform={`rotate(-90, 20, ${chartHeight / 2})`}
           >
-            Hours Worked
+            Total Hours
           </text>
           
           {/* Chart title */}
@@ -242,7 +255,7 @@ const DailyHoursLineGraph: React.FC<DailyHoursLineGraphProps> = ({
             textAnchor="middle"
             className="text-lg font-semibold fill-gray-900"
           >
-            Daily Work Hours
+            Monthly Work Hours Progress
           </text>
         </svg>
       </div>
@@ -252,24 +265,26 @@ const DailyHoursLineGraph: React.FC<DailyHoursLineGraphProps> = ({
         <div className="flex items-center space-x-4">
           <div className="flex items-center space-x-2">
             <div className="w-4 h-0.5 bg-blue-500"></div>
-            <span>Daily Hours</span>
+            <span>Monthly Total Hours</span>
           </div>
         </div>
         
         <div className="flex space-x-6">
           <div>
-            <span className="font-medium">Total Days: </span>
-            <span>{chartData.length}</span>
+            <span className="font-medium">Active Months: </span>
+            <span>{chartData.filter(d => d.totalHours > 0).length}</span>
           </div>
           <div>
-            <span className="font-medium">Avg Hours: </span>
+            <span className="font-medium">Total Hours: </span>
             <span>
-              {(chartData.reduce((sum, d) => sum + d.hours, 0) / chartData.length).toFixed(1)}h
+              {chartData.reduce((sum, d) => sum + d.totalHours, 0).toFixed(1)}h
             </span>
           </div>
           <div>
-            <span className="font-medium">Max Hours: </span>
-            <span>{Math.max(...chartData.map(d => d.hours)).toFixed(1)}h</span>
+            <span className="font-medium">Best Month: </span>
+            <span>
+              {chartData.reduce((max, d) => d.totalHours > max.totalHours ? d : max, chartData[0]).totalHours.toFixed(1)}h
+            </span>
           </div>
         </div>
       </div>
