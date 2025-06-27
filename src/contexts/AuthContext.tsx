@@ -66,7 +66,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         console.log('🚨 Auth loading timeout reached, setting loading to false');
         setLoading(false);
       }
-    }, 5000); // Increased to 5 seconds for better reliability
+    }, 3000);
 
     // Get initial session
     const getInitialSession = async () => {
@@ -161,7 +161,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (error && error.code !== 'PGRST116') { // PGRST116 is "no rows returned"
         console.error('❌ Error loading user profile:', error);
-        createFallbackUser(authUser);
+        await createUserProfileManually(authUser);
         return;
       }
 
@@ -181,56 +181,38 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           isRegular: profile.role === 'regular'
         });
       } else {
-        console.log('⚠️ No profile found, creating one...');
-        await createUserProfile(authUser);
+        console.log('⚠️ No profile found, creating one manually...');
+        await createUserProfileManually(authUser);
       }
     } catch (error) {
       console.error('❌ Error in loadUserProfile:', error);
-      createFallbackUser(authUser);
+      await createUserProfileManually(authUser);
     }
   };
 
-  const createUserProfile = async (authUser: SupabaseUser) => {
+  const createUserProfileManually = async (authUser: SupabaseUser) => {
     try {
-      console.log('🔧 Creating user profile for:', authUser.email);
+      console.log('🔧 Creating user profile manually for:', authUser.email);
       
-      // Determine role based on email or token
-      let role: 'admin' | 'regular' | 'specialized' = 'regular';
-      let tokenUsed: string | undefined;
-
-      // Check if admin email
-      if (['rishabh.biry@gmail.com', 'biryrishabh01@gmail.com', 'biryrishabh@gmail.com'].includes(authUser.email || '')) {
-        role = 'admin';
-        console.log('👑 Admin role assigned');
-      } else if (authUser.user_metadata?.token) {
-        // Check if token is valid
-        const isValidToken = await validateToken(authUser.user_metadata.token);
-        if (isValidToken) {
-          role = 'specialized';
-          tokenUsed = authUser.user_metadata.token;
-          console.log('🔑 Specialized role assigned with token');
-        }
-      }
-
-      // Create profile
+      // Get token from user metadata if available
+      const token = authUser.user_metadata?.token;
+      console.log('🎫 Token from metadata:', token ? 'present' : 'none');
+      
+      // Use the manual profile creation function
       const { data: newProfile, error } = await supabase
-        .from('user_profiles')
-        .insert({
-          id: authUser.id,
-          email: authUser.email || '',
-          role: role,
-          token_used: tokenUsed
-        })
-        .select()
-        .single();
+        .rpc('create_user_profile_manual', {
+          user_id: authUser.id,
+          user_email: authUser.email || '',
+          user_token: token || null
+        });
 
       if (error) {
-        console.error('❌ Error creating profile:', error);
+        console.error('❌ Error creating profile manually:', error);
         createFallbackUser(authUser);
         return;
       }
 
-      console.log('✅ Profile created successfully:', newProfile);
+      console.log('✅ Profile created manually:', newProfile);
       setUserProfile(newProfile);
       setUser({
         id: newProfile.id,
@@ -241,16 +223,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         isRegular: newProfile.role === 'regular'
       });
 
-      // Deactivate token if used
-      if (tokenUsed) {
-        await supabase
-          .from('user_tokens')
-          .update({ is_active: false })
-          .eq('token', tokenUsed);
-      }
-
     } catch (error) {
-      console.error('❌ Error creating user profile:', error);
+      console.error('❌ Error creating user profile manually:', error);
       createFallbackUser(authUser);
     }
   };
@@ -328,14 +302,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const register = async (email: string, password: string, token?: string): Promise<boolean> => {
     try {
       console.log('📝 Starting registration process for:', email);
-      console.log('🎫 Token provided:', !!token);
+      console.log('🎫 Token provided:', !!token, token ? `(${token})` : '');
       
       // Validate token if provided
       if (token) {
         console.log('🎫 Validating provided token...');
         const isValidToken = await validateToken(token);
         if (!isValidToken) {
-          console.error('❌ Invalid token provided');
+          console.error('❌ Invalid token provided:', token);
           throw new Error('Invalid or expired token');
         }
         console.log('✅ Token is valid');
@@ -350,7 +324,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
       };
 
-      console.log('📤 Sending signup request to Supabase...');
+      console.log('📤 Sending signup request to Supabase with data:', {
+        email,
+        hasToken: !!token,
+        tokenValue: token
+      });
+      
       const { data, error } = await supabase.auth.signUp(signUpData);
 
       if (error) {
@@ -360,6 +339,28 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (data.user) {
         console.log('✅ Registration successful, user:', data.user.email);
+        console.log('🔍 User metadata:', data.user.user_metadata);
+        
+        // Wait a moment for triggers to execute, then manually create profile if needed
+        setTimeout(async () => {
+          try {
+            const { data: existingProfile } = await supabase
+              .from('user_profiles')
+              .select('*')
+              .eq('id', data.user!.id)
+              .maybeSingle();
+            
+            if (!existingProfile) {
+              console.log('⚠️ Profile not created by trigger, creating manually...');
+              await createUserProfileManually(data.user!);
+            } else {
+              console.log('✅ Profile exists from trigger');
+            }
+          } catch (error) {
+            console.error('❌ Error checking/creating profile after registration:', error);
+          }
+        }, 1000);
+        
         return true;
       }
 
