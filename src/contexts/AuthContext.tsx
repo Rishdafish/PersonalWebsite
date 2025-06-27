@@ -53,6 +53,19 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
+// Helper function to handle promises with timeout
+const withTimeout = async <T>(
+  promise: Promise<T>,
+  timeoutMs: number = 5000,
+  errorMessage: string = 'Request timed out'
+): Promise<T> => {
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(() => reject(new Error(errorMessage)), timeoutMs);
+  });
+
+  return Promise.race([promise, timeoutPromise]);
+};
+
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -70,17 +83,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
 
     try {
-      // Simple health check with shorter timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000); // Reduced to 3 seconds
-
-      const { error } = await supabase
-        .from('users')
-        .select('count')
-        .limit(1)
-        .abortSignal(controller.signal);
-
-      clearTimeout(timeoutId);
+      // Simple health check with timeout
+      const { error } = await withTimeout(
+        supabase.from('users').select('count').limit(1),
+        4000,
+        'Connection timeout - please check your internet connection'
+      );
 
       if (error && error.message.includes('relation "public.users" does not exist')) {
         setConnectionError('Database tables are not set up. Please contact the administrator.');
@@ -102,7 +110,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       return true;
     } catch (error: any) {
       console.error('Supabase connection test error:', error);
-      if (error.name === 'AbortError') {
+      if (error.message.includes('timeout')) {
         setConnectionError('Connection timeout. Please check your internet connection.');
       } else {
         setConnectionError('Unable to connect to the database. Please try again later.');
@@ -135,13 +143,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           return;
         }
 
-        // Get session with shorter timeout
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000); // Reduced to 5 seconds
-
-        const { data: { session }, error } = await supabase.auth.getSession();
-        
-        clearTimeout(timeoutId);
+        // Get session with timeout
+        const { data: { session }, error } = await withTimeout(
+          supabase.auth.getSession(),
+          4000,
+          'Session check timeout'
+        );
         
         if (error) {
           console.error('Error getting session:', error);
@@ -161,7 +168,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
       } catch (error: any) {
         console.error('Error getting initial session:', error);
-        if (error.name === 'AbortError') {
+        if (error.message.includes('timeout')) {
           setConnectionError('Connection timeout. Please check your internet connection and try again.');
         } else {
           setConnectionError('Failed to initialize authentication. Please refresh the page.');
@@ -228,17 +235,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
 
       // Check if user_profiles table exists and has data with timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000); // Reduced to 3 seconds
-
-      const { data: profile, error } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('id', authUser.id)
-        .abortSignal(controller.signal)
-        .maybeSingle();
-
-      clearTimeout(timeoutId);
+      const { data: profile, error } = await withTimeout(
+        supabase
+          .from('user_profiles')
+          .select('*')
+          .eq('id', authUser.id)
+          .maybeSingle(),
+        3000,
+        'Profile loading timeout'
+      );
 
       if (error && error.code !== 'PGRST116') {
         console.error('Error loading user profile:', error);
@@ -263,7 +268,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
     } catch (error: any) {
       console.error('Error loading user profile:', error);
-      if (error.name === 'AbortError') {
+      if (error.message.includes('timeout')) {
         console.warn('Profile loading timeout, using basic user info');
       }
       createBasicUser(authUser);
@@ -300,18 +305,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
 
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000); // Reduced to 3 seconds
-
-      const { data, error } = await supabase
-        .from('user_tokens')
-        .select('*')
-        .eq('token', token)
-        .eq('is_active', true)
-        .abortSignal(controller.signal)
-        .maybeSingle();
-
-      clearTimeout(timeoutId);
+      const { data, error } = await withTimeout(
+        supabase
+          .from('user_tokens')
+          .select('*')
+          .eq('token', token)
+          .eq('is_active', true)
+          .maybeSingle(),
+        3000,
+        'Token validation timeout'
+      );
 
       return !error && !!data;
     } catch (error: any) {
@@ -332,29 +335,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
 
     try {
-      // Add timeout with AbortController - reduced timeout for faster feedback
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 6000); // Reduced to 6 seconds
-
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      clearTimeout(timeoutId);
+      const { data, error } = await withTimeout(
+        supabase.auth.signInWithPassword({
+          email,
+          password,
+        }),
+        5000,
+        'Login request timeout - please check your connection'
+      );
 
       if (error) {
         console.error('Login error:', error);
         
-        // Provide more specific error messages with immediate feedback
+        // Provide more specific error messages
         if (error.message.includes('Invalid login credentials')) {
           throw new Error('Invalid email or password. Please check your credentials and try again.');
         } else if (error.message.includes('Email not confirmed')) {
           throw new Error('Please check your email and confirm your account before logging in.');
         } else if (error.message.includes('Too many requests')) {
           throw new Error('Too many login attempts. Please wait a few minutes before trying again.');
-        } else if (error.message.includes('Supabase not configured')) {
-          throw new Error('Authentication service is not properly configured. Please contact the administrator.');
         } else {
           throw new Error(`Login failed: ${error.message}`);
         }
@@ -369,7 +368,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       return true;
     } catch (error: any) {
       console.error('Login error:', error);
-      if (error.name === 'AbortError') {
+      if (error.message.includes('timeout')) {
         throw new Error('Login request timeout. Please check your internet connection and try again.');
       }
       throw error;
@@ -410,26 +409,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         };
       }
 
-      // Add timeout with AbortController - reduced timeout for faster feedback
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 6000); // Reduced to 6 seconds
-
-      const { data, error } = await supabase.auth.signUp(signUpData);
-
-      clearTimeout(timeoutId);
+      const { data, error } = await withTimeout(
+        supabase.auth.signUp(signUpData),
+        5000,
+        'Registration request timeout - please check your connection'
+      );
 
       if (error) {
         console.error('Registration error:', error);
         
-        // Provide more specific error messages with immediate feedback
+        // Provide more specific error messages
         if (error.message.includes('User already registered')) {
           throw new Error('An account with this email already exists. Please try logging in instead.');
         } else if (error.message.includes('Password should be at least')) {
           throw new Error('Password must be at least 6 characters long.');
         } else if (error.message.includes('Invalid email')) {
           throw new Error('Please enter a valid email address.');
-        } else if (error.message.includes('Supabase not configured')) {
-          throw new Error('Authentication service is not properly configured. Please contact the administrator.');
         } else {
           throw new Error(`Registration failed: ${error.message}`);
         }
@@ -445,7 +440,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       return true;
     } catch (error: any) {
       console.error('Registration error:', error);
-      if (error.name === 'AbortError') {
+      if (error.message.includes('timeout')) {
         throw new Error('Registration request timeout. Please check your internet connection and try again.');
       }
       throw error;
@@ -455,11 +450,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const logout = async () => {
     try {
       if (isSupabaseConfigured) {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3000); // Reduced timeout
-        
-        await supabase.auth.signOut();
-        clearTimeout(timeoutId);
+        await withTimeout(
+          supabase.auth.signOut(),
+          3000,
+          'Logout timeout'
+        );
       }
       setUser(null);
       setUserProfile(null);

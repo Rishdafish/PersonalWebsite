@@ -3,46 +3,23 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-let supabase: any;
-
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('Missing Supabase environment variables');
-  // Create a mock client to prevent crashes
-  const mockClient = {
-    auth: {
-      getSession: () => Promise.resolve({ data: { session: null }, error: null }),
-      onAuthStateChange: (callback: any) => {
-        // Immediately call the callback with no session to prevent timeout
-        setTimeout(() => {
-          callback('SIGNED_OUT', null);
-        }, 0);
-        return { 
-          data: { 
-            subscription: { 
-              unsubscribe: () => {} 
-            } 
-          } 
-        };
-      },
-      signInWithPassword: () => Promise.resolve({ data: { user: null }, error: { message: 'Supabase not configured' } }),
-      signUp: () => Promise.resolve({ data: { user: null }, error: { message: 'Supabase not configured' } }),
-      signOut: () => Promise.resolve({ error: null })
-    },
-    from: () => ({
-      select: () => ({ eq: () => ({ maybeSingle: () => Promise.resolve({ data: null, error: null }) }) }),
-      insert: () => ({ select: () => ({ single: () => Promise.resolve({ data: null, error: null }) }) }),
-      update: () => ({ eq: () => ({ select: () => ({ single: () => Promise.resolve({ data: null, error: null }) }) }) }),
-      delete: () => ({ eq: () => Promise.resolve({ error: null }) }),
-      upsert: () => Promise.resolve({ error: null })
-    })
-  };
-  
-  supabase = mockClient;
-} else {
-  supabase = createClient(supabaseUrl, supabaseAnonKey);
+  throw new Error('Missing Supabase environment variables. Please check your .env file.');
 }
 
-export { supabase };
+// Create Supabase client with optimized settings
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: false
+  },
+  global: {
+    headers: {
+      'x-client-info': 'supabase-js-web'
+    }
+  }
+});
 
 // Database types
 export interface UserStatistics {
@@ -114,6 +91,19 @@ export interface Project {
   updated_at: string;
 }
 
+// Helper function to handle API calls with timeout
+const withTimeout = async <T>(
+  promise: Promise<T>,
+  timeoutMs: number = 5000,
+  errorMessage: string = 'Request timed out'
+): Promise<T> => {
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(() => reject(new Error(errorMessage)), timeoutMs);
+  });
+
+  return Promise.race([promise, timeoutPromise]);
+};
+
 // API functions for blog posts
 export const blogAPI = {
   async getAll(userId?: string) {
@@ -129,7 +119,7 @@ export const blogAPI = {
         query = query.eq('published', true);
       }
       
-      const { data, error } = await query;
+      const { data, error } = await withTimeout(query, 8000, 'Failed to load blog posts - request timed out');
       if (error) throw error;
       return data || [];
     } catch (error) {
@@ -140,11 +130,15 @@ export const blogAPI = {
 
   async create(post: Omit<BlogPost, 'id' | 'created_at' | 'updated_at'>) {
     try {
-      const { data, error } = await supabase
-        .from('blog_posts')
-        .insert([post])
-        .select()
-        .single();
+      const { data, error } = await withTimeout(
+        supabase
+          .from('blog_posts')
+          .insert([post])
+          .select()
+          .single(),
+        8000,
+        'Failed to create blog post - request timed out'
+      );
       
       if (error) throw error;
       return data;
@@ -156,12 +150,16 @@ export const blogAPI = {
 
   async update(id: string, updates: Partial<BlogPost>) {
     try {
-      const { data, error } = await supabase
-        .from('blog_posts')
-        .update(updates)
-        .eq('id', id)
-        .select()
-        .single();
+      const { data, error } = await withTimeout(
+        supabase
+          .from('blog_posts')
+          .update(updates)
+          .eq('id', id)
+          .select()
+          .single(),
+        8000,
+        'Failed to update blog post - request timed out'
+      );
       
       if (error) throw error;
       return data;
@@ -173,10 +171,14 @@ export const blogAPI = {
 
   async delete(id: string) {
     try {
-      const { error } = await supabase
-        .from('blog_posts')
-        .delete()
-        .eq('id', id);
+      const { error } = await withTimeout(
+        supabase
+          .from('blog_posts')
+          .delete()
+          .eq('id', id),
+        8000,
+        'Failed to delete blog post - request timed out'
+      );
       
       if (error) throw error;
     } catch (error) {
@@ -199,7 +201,7 @@ export const projectsAPI = {
         query = query.eq('user_id', userId);
       }
       
-      const { data, error } = await query;
+      const { data, error } = await withTimeout(query, 8000, 'Failed to load projects - request timed out');
       if (error) throw error;
       return data || [];
     } catch (error) {
@@ -210,11 +212,15 @@ export const projectsAPI = {
 
   async create(project: Omit<Project, 'id' | 'created_at' | 'updated_at'>) {
     try {
-      const { data, error } = await supabase
-        .from('projects')
-        .insert([project])
-        .select()
-        .single();
+      const { data, error } = await withTimeout(
+        supabase
+          .from('projects')
+          .insert([project])
+          .select()
+          .single(),
+        8000,
+        'Failed to create project - request timed out'
+      );
       
       if (error) throw error;
       return data;
@@ -226,12 +232,16 @@ export const projectsAPI = {
 
   async update(id: string, updates: Partial<Project>) {
     try {
-      const { data, error } = await supabase
-        .from('projects')
-        .update(updates)
-        .eq('id', id)
-        .select()
-        .single();
+      const { data, error } = await withTimeout(
+        supabase
+          .from('projects')
+          .update(updates)
+          .eq('id', id)
+          .select()
+          .single(),
+        8000,
+        'Failed to update project - request timed out'
+      );
       
       if (error) throw error;
       return data;
@@ -243,10 +253,14 @@ export const projectsAPI = {
 
   async delete(id: string) {
     try {
-      const { error } = await supabase
-        .from('projects')
-        .delete()
-        .eq('id', id);
+      const { error } = await withTimeout(
+        supabase
+          .from('projects')
+          .delete()
+          .eq('id', id),
+        8000,
+        'Failed to delete project - request timed out'
+      );
       
       if (error) throw error;
     } catch (error) {
@@ -264,20 +278,24 @@ export const workEntriesAPI = {
       const startDate = `${targetYear}-01-01`;
       const endDate = `${targetYear}-12-31`;
       
-      const { data, error } = await supabase
-        .from('work_entries')
-        .select(`
-          *,
-          subjects (
-            id,
-            name,
-            icon
-          )
-        `)
-        .eq('user_id', userId)
-        .gte('entry_date', startDate)
-        .lte('entry_date', endDate)
-        .order('entry_date', { ascending: true });
+      const { data, error } = await withTimeout(
+        supabase
+          .from('work_entries')
+          .select(`
+            *,
+            subjects (
+              id,
+              name,
+              icon
+            )
+          `)
+          .eq('user_id', userId)
+          .gte('entry_date', startDate)
+          .lte('entry_date', endDate)
+          .order('entry_date', { ascending: true }),
+        8000,
+        'Failed to load annual data - request timed out'
+      );
       
       if (error) throw error;
       return data || [];
@@ -293,12 +311,16 @@ export const workEntriesAPI = {
       const startDate = `${targetYear}-01-01`;
       const endDate = `${targetYear}-12-31`;
       
-      const { data, error } = await supabase
-        .from('work_entries')
-        .select('entry_date, hours')
-        .eq('user_id', userId)
-        .gte('entry_date', startDate)
-        .lte('entry_date', endDate);
+      const { data, error } = await withTimeout(
+        supabase
+          .from('work_entries')
+          .select('entry_date, hours')
+          .eq('user_id', userId)
+          .gte('entry_date', startDate)
+          .lte('entry_date', endDate),
+        8000,
+        'Failed to load daily totals - request timed out'
+      );
       
       if (error) throw error;
       
