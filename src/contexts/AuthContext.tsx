@@ -77,6 +77,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         
         if (error) {
           console.error('❌ Error getting session:', error);
+          // Clear invalid session data when there's an error
+          await supabase.auth.signOut();
           if (mounted) {
             setUser(null);
             setUserProfile(null);
@@ -95,6 +97,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
       } catch (error) {
         console.error('❌ Error in getInitialSession:', error);
+        // Clear invalid session data when there's an exception
+        await supabase.auth.signOut();
         if (mounted) {
           setUser(null);
           setUserProfile(null);
