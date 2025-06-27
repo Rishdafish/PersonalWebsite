@@ -30,7 +30,7 @@ function App() {
                   </ProtectedRoute>
                 } />
                 <Route path="/hours" element={
-                  <ProtectedRoute requiresHoursAccess>
+                  <ProtectedRoute>
                     <Hours />
                   </ProtectedRoute>
                 } />

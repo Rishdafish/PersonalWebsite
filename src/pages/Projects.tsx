@@ -5,7 +5,7 @@ import { projectsAPI, Project } from '../lib/supabase';
 import ProjectModal, { ProjectData } from '../components/ProjectModal';
 
 const Projects: React.FC = () => {
-  const { user, canEditContent } = useAuth();
+  const { user, isAdmin } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedProject, setExpandedProject] = useState<string | null>(null);
@@ -21,7 +21,7 @@ const Projects: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      const data = await projectsAPI.getAll(canEditContent ? user?.id : undefined);
+      const data = await projectsAPI.getAll(isAdmin ? user?.id : undefined);
       setProjects(data || []);
     } catch (err) {
       console.error('Error loading projects:', err);
@@ -151,7 +151,7 @@ const Projects: React.FC = () => {
           {projects.length === 0 ? (
             <div className="col-span-full text-center py-12">
               <p className="text-gray-500 text-lg mb-4">No projects yet</p>
-              {canEditContent && (
+              {isAdmin && (
                 <button
                   onClick={() => setShowProjectModal(true)}
                   className="text-blue-600 hover:text-blue-700 transition-colors"
@@ -178,7 +178,7 @@ const Projects: React.FC = () => {
                         </div>
                       </div>
                       
-                      {canEditContent && (
+                      {isAdmin && (
                         <div className="flex space-x-2 ml-4">
                           <button
                             onClick={(e) => {
@@ -253,7 +253,7 @@ const Projects: React.FC = () => {
           )}
         </div>
 
-        {canEditContent && (
+        {isAdmin && (
           <button 
             onClick={() => {
               setEditingProject(null);

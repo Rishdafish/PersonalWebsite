@@ -2,26 +2,19 @@ import React, { createContext, useContext, useState, ReactNode, useEffect } from
 import { supabase } from '../lib/supabase';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 
-export type UserRole = 'admin' | 'regular' | 'specialized';
-
 interface User {
   id: string;
   email: string;
-  role: UserRole;
+  isAdmin: boolean;
 }
 
 interface AuthContextType {
   user: User | null;
   login: (email: string, password: string) => Promise<boolean>;
-  register: (email: string, password: string, token?: string) => Promise<boolean>;
+  register: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
   isAuthenticated: boolean;
   isAdmin: boolean;
-  isSpecialized: boolean;
-  canAccessHours: boolean;
-  canComment: boolean;
-  canEditContent: boolean;
-  loading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -42,13 +35,28 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Admin emails for admin privileges
+  const ADMIN_EMAILS = [
+    'rishabh.biry@gmail.com',
+    'biryrishabh01@gmail.com',
+    'biryrishabh@gmail.com'
+  ];
+
+  const isAdminEmail = (email: string) => {
+    return ADMIN_EMAILS.includes(email);
+  };
+
   useEffect(() => {
     // Get initial session
     const getInitialSession = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
-          await loadUserProfile(session.user);
+          setUser({
+            id: session.user.id,
+            email: session.user.email || '',
+            isAdmin: isAdminEmail(session.user.email || '')
+          });
         }
       } catch (error) {
         console.error('Error getting initial session:', error);
@@ -63,7 +71,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (session?.user) {
-          await loadUserProfile(session.user);
+          setUser({
+            id: session.user.id,
+            email: session.user.email || '',
+            isAdmin: isAdminEmail(session.user.email || '')
+          });
         } else {
           setUser(null);
         }
@@ -73,29 +85,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     return () => subscription.unsubscribe();
   }, []);
-
-  const loadUserProfile = async (authUser: SupabaseUser) => {
-    try {
-      const { data: profile, error } = await supabase
-        .from('user_profiles')
-        .select('role')
-        .eq('id', authUser.id)
-        .single();
-
-      if (error) {
-        console.error('Error loading user profile:', error);
-        return;
-      }
-
-      setUser({
-        id: authUser.id,
-        email: authUser.email || '',
-        role: profile.role as UserRole
-      });
-    } catch (error) {
-      console.error('Error loading user profile:', error);
-    }
-  };
 
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
@@ -110,7 +99,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
 
       if (data.user) {
-        await loadUserProfile(data.user);
+        setUser({
+          id: data.user.id,
+          email: data.user.email || '',
+          isAdmin: isAdminEmail(data.user.email || '')
+        });
         return true;
       }
 
@@ -121,29 +114,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const register = async (email: string, password: string, token?: string): Promise<boolean> => {
+  const register = async (email: string, password: string): Promise<boolean> => {
     try {
-      // Validate token if provided
-      if (token) {
-        const { data: tokenData, error: tokenError } = await supabase
-          .from('user_tokens')
-          .select('token')
-          .eq('token', token)
-          .eq('is_active', true)
-          .single();
-
-        if (tokenError || !tokenData) {
-          console.error('Invalid token provided');
-          return false;
-        }
-      }
-
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
-        options: {
-          data: token ? { token } : {}
-        }
       });
 
       if (error) {
@@ -152,11 +127,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
 
       if (data.user) {
-        // User profile will be created automatically by the trigger
-        // Load the profile after a short delay to ensure trigger has executed
-        setTimeout(async () => {
-          await loadUserProfile(data.user!);
-        }, 1000);
+        // Note: User will be set via the auth state change listener
+        // if email confirmation is disabled, or after email confirmation
         return true;
       }
 
@@ -176,12 +148,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  // Role-based access control helpers
-  const isAdmin = user?.role === 'admin';
-  const isSpecialized = user?.role === 'specialized';
-  const canAccessHours = isAdmin || isSpecialized;
-  const canComment = isAdmin || isSpecialized;
-  const canEditContent = isAdmin;
+  // Don't render children until we've checked the initial session
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <AuthContext.Provider value={{
@@ -190,12 +167,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       register,
       logout,
       isAuthenticated: !!user,
-      isAdmin,
-      isSpecialized,
-      canAccessHours,
-      canComment,
-      canEditContent,
-      loading
+      isAdmin: user?.isAdmin || false
     }}>
       {children}
     </AuthContext.Provider>
