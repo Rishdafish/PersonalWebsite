@@ -270,7 +270,7 @@ const Blog: React.FC = () => {
                 )}
 
                 {expandedPost === post.id && (
-                  <CommentSystem postId={parseInt(post.id.replace(/-/g, '').substring(0, 8), 16)} />
+                  <CommentSystem postId={post.id} />
                 )}
               </article>
             ))
