@@ -180,16 +180,74 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         email: authUser.email, 
         id: authUser.id 
       });
-      
-      // First try to get existing profile
-      const { data: profile, error } = await supabase
+
+      // Step 1: Test basic database connectivity
+      authDebug('🔍 Step 1: Testing database connectivity...');
+      try {
+        const { data: testData, error: testError } = await supabase
+          .from('user_profiles')
+          .select('count')
+          .limit(1);
+        
+        if (testError) {
+          authError('Database connectivity test failed', testError);
+          createFallbackUser(authUser);
+          return;
+        }
+        authDebug('✅ Database connectivity test passed');
+      } catch (connectError) {
+        authError('Database connectivity exception', connectError);
+        createFallbackUser(authUser);
+        return;
+      }
+
+      // Step 2: Check if user_profiles table exists and has correct structure
+      authDebug('🔍 Step 2: Checking table structure...');
+      try {
+        const { data: tableCheck, error: tableError } = await supabase
+          .rpc('check_trigger_status');
+        
+        if (tableError) {
+          authError('Table structure check failed', tableError);
+        } else {
+          authDebug('📋 Table structure check result', tableCheck);
+        }
+      } catch (structureError) {
+        authError('Table structure check exception', structureError);
+      }
+
+      // Step 3: Try to get existing profile with detailed logging
+      authDebug('🔍 Step 3: Querying for existing profile...');
+      const profileQuery = supabase
         .from('user_profiles')
         .select('*')
-        .eq('id', authUser.id)
-        .maybeSingle();
+        .eq('id', authUser.id);
 
-      if (error && error.code !== 'PGRST116') {
-        authError('Error loading user profile', error);
+      authDebug('📤 Executing profile query', {
+        userId: authUser.id,
+        query: 'SELECT * FROM user_profiles WHERE id = $1'
+      });
+
+      const { data: profile, error: profileError } = await profileQuery.maybeSingle();
+
+      authDebug('📥 Profile query response', {
+        hasData: !!profile,
+        hasError: !!profileError,
+        errorCode: profileError?.code,
+        errorMessage: profileError?.message,
+        profileData: profile
+      });
+
+      if (profileError && profileError.code !== 'PGRST116') {
+        authError('Error loading user profile', {
+          code: profileError.code,
+          message: profileError.message,
+          details: profileError.details,
+          hint: profileError.hint
+        });
+        
+        // Try manual creation
+        authDebug('🛠️ Attempting manual profile creation due to query error...');
         await createUserProfileManually(authUser);
         return;
       }
@@ -198,8 +256,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         authDebug('✅ Profile loaded successfully', {
           email: profile.email,
           role: profile.role,
-          id: profile.id
+          id: profile.id,
+          tokenUsed: profile.token_used
         });
+        
         setUserProfile(profile);
         setUser({
           id: profile.id,
@@ -209,55 +269,118 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           isSpecialized: profile.role === 'specialized',
           isRegular: profile.role === 'regular'
         });
+        
+        authDebug('✅ User state updated successfully');
       } else {
-        authDebug('⚠️ No profile found, creating one manually...');
+        authDebug('⚠️ No profile found (PGRST116 or null result), creating manually...');
         await createUserProfileManually(authUser);
       }
     } catch (error) {
-      authError('Exception in loadUserProfile', error);
+      authError('Exception in loadUserProfile', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+        error
+      });
+      
+      authDebug('🆘 Falling back to manual profile creation due to exception...');
       await createUserProfileManually(authUser);
     }
   };
 
   const createUserProfileManually = async (authUser: SupabaseUser) => {
     try {
-      authDebug('🛠️ Creating user profile manually', { email: authUser.email });
+      authDebug('🛠️ Creating user profile manually', { 
+        email: authUser.email,
+        userId: authUser.id 
+      });
       
       const token = authUser.user_metadata?.token;
-      authDebug('Token from metadata', { hasToken: !!token, token });
-      
-      const { data: newProfile, error } = await supabase
+      authDebug('🎫 Token from metadata', { 
+        hasToken: !!token, 
+        token: token || 'none',
+        allMetadata: authUser.user_metadata
+      });
+
+      // Step 1: Test the manual creation function exists
+      authDebug('🔍 Testing manual creation function availability...');
+      try {
+        const { data: functionTest, error: functionError } = await supabase
+          .rpc('check_trigger_status');
+        
+        if (functionError) {
+          authError('Function availability test failed', functionError);
+        } else {
+          authDebug('✅ Functions are available', functionTest);
+        }
+      } catch (funcError) {
+        authError('Function test exception', funcError);
+      }
+
+      // Step 2: Call the manual creation function
+      authDebug('📤 Calling create_user_profile_manual function...');
+      const { data: newProfile, error: createError } = await supabase
         .rpc('create_user_profile_manual', {
           user_id: authUser.id,
           user_email: authUser.email || '',
           user_token: token || null
         });
 
-      if (error) {
-        authError('Error creating profile manually', error);
+      authDebug('📥 Manual creation response', {
+        hasData: !!newProfile,
+        hasError: !!createError,
+        errorCode: createError?.code,
+        errorMessage: createError?.message,
+        profileData: newProfile
+      });
+
+      if (createError) {
+        authError('Error creating profile manually', {
+          code: createError.code,
+          message: createError.message,
+          details: createError.details,
+          hint: createError.hint
+        });
+        
+        authDebug('🆘 Manual creation failed, using fallback...');
         createFallbackUser(authUser);
         return;
       }
 
-      authDebug('✅ Profile created manually', newProfile);
-      setUserProfile(newProfile);
-      setUser({
-        id: newProfile.id,
-        email: newProfile.email,
-        role: newProfile.role,
-        isAdmin: newProfile.role === 'admin',
-        isSpecialized: newProfile.role === 'specialized',
-        isRegular: newProfile.role === 'regular'
-      });
+      if (newProfile) {
+        authDebug('✅ Profile created manually', newProfile);
+        setUserProfile(newProfile);
+        setUser({
+          id: newProfile.id,
+          email: newProfile.email,
+          role: newProfile.role,
+          isAdmin: newProfile.role === 'admin',
+          isSpecialized: newProfile.role === 'specialized',
+          isRegular: newProfile.role === 'regular'
+        });
+        
+        authDebug('✅ User state updated after manual creation');
+      } else {
+        authError('Manual creation returned no data');
+        createFallbackUser(authUser);
+      }
 
     } catch (error) {
-      authError('Exception creating user profile manually', error);
+      authError('Exception creating user profile manually', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+        error
+      });
+      
+      authDebug('🆘 Manual creation exception, using fallback...');
       createFallbackUser(authUser);
     }
   };
 
   const createFallbackUser = (authUser: SupabaseUser) => {
-    authDebug('🆘 Creating fallback user', { email: authUser.email });
+    authDebug('🆘 Creating fallback user', { 
+      email: authUser.email,
+      userId: authUser.id 
+    });
     
     let role: 'admin' | 'regular' | 'specialized' = 'regular';
     if (['rishabh.biry@gmail.com', 'biryrishabh01@gmail.com', 'biryrishabh@gmail.com'].includes(authUser.email || '')) {
