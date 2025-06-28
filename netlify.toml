@@ -1,0 +1,13 @@
+[build]
+  publish = "dist"
+  command = "npm run build"
+
+[build.environment]
+  # These will be set in Netlify dashboard for security
+  # VITE_SUPABASE_URL = "your_supabase_url"
+  # VITE_SUPABASE_ANON_KEY = "your_anon_key"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
