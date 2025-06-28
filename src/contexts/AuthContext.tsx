@@ -51,8 +51,8 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
-// Enhanced debugging functions with alerts
-const authDebug = (message: string, data?: any, showAlert = false) => {
+// Console-only debugging functions
+const authDebug = (message: string, data?: any) => {
   const timestamp = new Date().toISOString();
   const prefix = '🔐 [AUTH DEBUG]';
   
@@ -61,22 +61,11 @@ const authDebug = (message: string, data?: any, showAlert = false) => {
   } else {
     console.log(`${prefix} ${timestamp}: ${message}`);
   }
-  
-  if (showAlert && typeof window !== 'undefined') {
-    const alertMessage = data ? `${message}\n\nDetails: ${JSON.stringify(data, null, 2)}` : message;
-    alert(`🔐 Auth Debug: ${alertMessage}`);
-  }
 };
 
-const authError = (message: string, error?: any, showAlert = true) => {
+const authError = (message: string, error?: any) => {
   const timestamp = new Date().toISOString();
   console.error(`❌ [AUTH ERROR] ${timestamp}: ${message}`, error);
-  
-  if (showAlert && typeof window !== 'undefined') {
-    const errorDetails = error ? 
-      `\n\nError Details:\n${error.message || error}\n${error.code ? `Code: ${error.code}` : ''}` : '';
-    alert(`❌ Authentication Error: ${message}${errorDetails}`);
-  }
 };
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
@@ -93,7 +82,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     // Set a maximum loading time to prevent infinite loading
     loadingTimeout = setTimeout(() => {
       if (mounted) {
-        authError('Auth loading timeout reached after 5 seconds', null, true);
+        authError('Auth loading timeout reached after 5 seconds');
         setLoading(false);
       }
     }, 5000);
@@ -367,7 +356,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return true;
       }
 
-      authError('Login returned no user', null);
+      authError('Login returned no user');
       return false;
     } catch (error) {
       authError('Exception during login', error);
@@ -381,7 +370,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         email, 
         hasToken: !!token,
         token: token || 'none'
-      }, true);
+      });
       
       // Validate token if provided
       if (token) {
@@ -430,7 +419,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           userEmail: data.user.email,
           userId: data.user.id,
           emailConfirmed: !!data.user.email_confirmed_at
-        }, true);
+        });
         
         // Wait for profile creation
         setTimeout(async () => {
@@ -455,7 +444,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return true;
       }
 
-      authError('Registration returned no user', null);
+      authError('Registration returned no user');
       return false;
     } catch (error) {
       authError('Exception during registration', error);

@@ -18,16 +18,13 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [tokenValidated, setTokenValidated] = useState<boolean | null>(null);
-  const [debugInfo, setDebugInfo] = useState<string>('');
   
   const { login, register, validateToken } = useAuth();
 
-  // Debug function for modal
+  // Debug function for modal - console only
   const modalDebug = (message: string, data?: any) => {
     const timestamp = new Date().toLocaleTimeString();
-    const debugMessage = `[${timestamp}] ${message}`;
-    console.log('🔐 [AUTH MODAL]', debugMessage, data || '');
-    setDebugInfo(prev => `${prev}\n${debugMessage}`);
+    console.log(`🔐 [AUTH MODAL] [${timestamp}] ${message}`, data || '');
   };
 
   const handleTokenValidation = async (tokenValue: string) => {
@@ -43,16 +40,9 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
       const isValid = await validateToken(tokenValue);
       setTokenValidated(isValid);
       modalDebug('Token validation result', { isValid });
-      
-      if (isValid) {
-        alert('✅ Token is valid! You will have specialized access.');
-      } else {
-        alert('❌ Token is invalid. You will have regular access.');
-      }
     } catch (error) {
       modalDebug('Token validation error', error);
       setTokenValidated(false);
-      alert('❌ Error validating token. Please try again.');
     }
   };
 
@@ -98,14 +88,12 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
         success = await login(email, password);
         if (!success) {
           setError('Invalid email or password. Please check your credentials and try again.');
-          alert('❌ Login failed. Please check your credentials.');
         }
       } else {
         modalDebug('Attempting registration', { hasToken: !!token });
         success = await register(email, password, token || undefined);
         if (!success) {
           setError('Registration failed. Please check your details and try again.');
-          alert('❌ Registration failed. Please try again.');
         }
       }
 
@@ -113,14 +101,12 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
 
       if (success) {
         modalDebug('Auth successful, calling onAuthSuccess');
-        alert('✅ Authentication successful!');
         resetForm();
         onAuthSuccess();
       }
     } catch (err: any) {
       modalDebug('Auth error in modal', err);
       setError(err.message || 'An error occurred. Please try again.');
-      alert(`❌ Authentication error: ${err.message || 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
@@ -143,7 +129,6 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
     setShowPassword(false);
     setShowConfirmPassword(false);
     setLoading(false);
-    setDebugInfo('');
   };
 
   const toggleMode = () => {
@@ -271,14 +256,6 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
             <div className="error-message">
               {error}
             </div>
-          )}
-
-          {/* Debug Information */}
-          {debugInfo && (
-            <details className="text-xs bg-gray-100 p-2 rounded">
-              <summary className="cursor-pointer font-medium">Debug Information</summary>
-              <pre className="mt-2 whitespace-pre-wrap">{debugInfo}</pre>
-            </details>
           )}
           
           <button 
