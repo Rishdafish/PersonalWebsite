@@ -1,17 +1,15 @@
 [build]
   publish = "dist"
-  command = "npm run build"
+  command = "npm ci && npm run build"
 
 [build.environment]
-  # These will be set in Netlify dashboard for security
-  # VITE_SUPABASE_URL = "your_supabase_url"
-  # VITE_SUPABASE_ANON_KEY = "your_anon_key"
+  NODE_VERSION = "18"
+  NPM_FLAGS = "--production=false"
 
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
 
-# Add this section to help with debugging
 [context.production.environment]
   NODE_ENV = "production"
