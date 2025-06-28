@@ -14,7 +14,7 @@ const debugLog = (message: string, data?: any, isError = false) => {
     console.log(`${prefix} ${timestamp}: ${message}`);
   }
   
-  // Also show alerts for critical issues in production
+  // Show alerts for critical issues
   if (isError && typeof window !== 'undefined') {
     alert(`Supabase Error: ${message}`);
   }
@@ -26,7 +26,10 @@ debugLog('Environment check:', {
   hasKey: !!supabaseAnonKey,
   urlLength: supabaseUrl?.length || 0,
   keyLength: supabaseAnonKey?.length || 0,
-  nodeEnv: import.meta.env.MODE
+  nodeEnv: import.meta.env.MODE,
+  // Show actual values for debugging (remove in production)
+  actualUrl: supabaseUrl,
+  actualKey: supabaseAnonKey ? `${supabaseAnonKey.substring(0, 20)}...` : 'MISSING'
 });
 
 if (!supabaseUrl || !supabaseAnonKey) {
@@ -34,10 +37,18 @@ if (!supabaseUrl || !supabaseAnonKey) {
   debugLog(errorMsg, {
     VITE_SUPABASE_URL: supabaseUrl ? 'Present' : 'Missing',
     VITE_SUPABASE_ANON_KEY: supabaseAnonKey ? 'Present' : 'Missing',
-    allEnvVars: Object.keys(import.meta.env)
+    allEnvVars: Object.keys(import.meta.env).filter(key => key.startsWith('VITE_'))
   }, true);
   
-  alert(`❌ Configuration Error: ${errorMsg}\n\nPlease check your environment variables in Netlify dashboard.`);
+  alert(`❌ Configuration Error: ${errorMsg}\n\nPlease check your environment variables in Netlify dashboard:\n- VITE_SUPABASE_URL\n- VITE_SUPABASE_ANON_KEY`);
+  throw new Error(errorMsg);
+}
+
+// Validate URL format
+if (!supabaseUrl.includes('supabase.co')) {
+  const errorMsg = 'Invalid Supabase URL format';
+  debugLog(errorMsg, { url: supabaseUrl }, true);
+  alert(`❌ Invalid Supabase URL: ${supabaseUrl}\n\nExpected format: https://your-project.supabase.co`);
   throw new Error(errorMsg);
 }
 
@@ -52,14 +63,14 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 
 debugLog('✅ Supabase client created successfully');
 
-// Enhanced connection test with timeout and detailed error reporting
+// Enhanced connection test with shorter timeout for faster feedback
 const testConnection = async () => {
   debugLog('🔍 Starting connection test...');
   
   const timeoutPromise = new Promise((_, reject) => {
     setTimeout(() => {
-      reject(new Error('Connection test timeout after 10 seconds'));
-    }, 10000);
+      reject(new Error('Connection test timeout after 5 seconds'));
+    }, 5000); // Reduced timeout
   });
   
   const connectionPromise = supabase.from('user_tokens').select('count').limit(1);
@@ -73,12 +84,14 @@ const testConnection = async () => {
         error: error.message,
         code: error.code,
         details: error.details,
-        hint: error.hint
+        hint: error.hint,
+        status: error.status
       }, true);
       
-      alert(`❌ Database Connection Failed!\n\nError: ${error.message}\nCode: ${error.code}\n\nPlease check your Supabase configuration.`);
+      alert(`❌ Database Connection Failed!\n\nError: ${error.message}\nCode: ${error.code}\n\nThis usually means:\n1. Wrong Supabase URL or API key\n2. Database is not accessible\n3. Network connectivity issues`);
     } else {
       debugLog('✅ Connection test successful');
+      alert('✅ Supabase connection successful!');
     }
   } catch (error: any) {
     debugLog('Connection test exception', {
@@ -86,7 +99,11 @@ const testConnection = async () => {
       stack: error.stack
     }, true);
     
-    alert(`❌ Connection Test Failed!\n\nError: ${error.message}\n\nThis might indicate network issues or incorrect Supabase configuration.`);
+    if (error.message.includes('timeout')) {
+      alert(`❌ Connection Timeout!\n\nYour Supabase database is not responding.\n\nPossible causes:\n1. Incorrect VITE_SUPABASE_URL in Netlify\n2. Incorrect VITE_SUPABASE_ANON_KEY in Netlify\n3. Supabase project is paused\n4. Network connectivity issues\n\nPlease check your Netlify environment variables!`);
+    } else {
+      alert(`❌ Connection Test Failed!\n\nError: ${error.message}\n\nPlease check your Supabase configuration in Netlify.`);
+    }
   }
 };
 
