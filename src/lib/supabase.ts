@@ -3,16 +3,42 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-console.log('🔧 Supabase Configuration Check:');
-console.log('URL:', supabaseUrl ? '✅ Present' : '❌ Missing');
-console.log('Anon Key:', supabaseAnonKey ? '✅ Present' : '❌ Missing');
+// Enhanced debugging function
+const debugLog = (message: string, data?: any, isError = false) => {
+  const timestamp = new Date().toISOString();
+  const prefix = isError ? '❌ [SUPABASE ERROR]' : '🔧 [SUPABASE DEBUG]';
+  
+  if (data !== undefined) {
+    console.log(`${prefix} ${timestamp}: ${message}`, data);
+  } else {
+    console.log(`${prefix} ${timestamp}: ${message}`);
+  }
+  
+  // Also show alerts for critical issues in production
+  if (isError && typeof window !== 'undefined') {
+    alert(`Supabase Error: ${message}`);
+  }
+};
+
+debugLog('🚀 Initializing Supabase client...');
+debugLog('Environment check:', {
+  hasUrl: !!supabaseUrl,
+  hasKey: !!supabaseAnonKey,
+  urlLength: supabaseUrl?.length || 0,
+  keyLength: supabaseAnonKey?.length || 0,
+  nodeEnv: import.meta.env.MODE
+});
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('❌ Missing Supabase environment variables');
-  console.error('Please check your .env file and ensure it contains:');
-  console.error('VITE_SUPABASE_URL=your_supabase_url');
-  console.error('VITE_SUPABASE_ANON_KEY=your_anon_key');
-  throw new Error('Missing Supabase environment variables');
+  const errorMsg = 'Missing Supabase environment variables';
+  debugLog(errorMsg, {
+    VITE_SUPABASE_URL: supabaseUrl ? 'Present' : 'Missing',
+    VITE_SUPABASE_ANON_KEY: supabaseAnonKey ? 'Present' : 'Missing',
+    allEnvVars: Object.keys(import.meta.env)
+  }, true);
+  
+  alert(`❌ Configuration Error: ${errorMsg}\n\nPlease check your environment variables in Netlify dashboard.`);
+  throw new Error(errorMsg);
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
@@ -24,20 +50,48 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   }
 });
 
-console.log('✅ Supabase client initialized');
+debugLog('✅ Supabase client created successfully');
 
-// Test connection
-supabase.from('user_tokens').select('count').limit(1)
-  .then(({ data, error }) => {
-    if (error && error.code !== 'PGRST116') { // PGRST116 is "no rows returned" which is fine
-      console.error('❌ Supabase connection test failed:', error);
-    } else {
-      console.log('✅ Supabase connection test successful');
-    }
-  })
-  .catch((error) => {
-    console.error('❌ Supabase connection test error:', error);
+// Enhanced connection test with timeout and detailed error reporting
+const testConnection = async () => {
+  debugLog('🔍 Starting connection test...');
+  
+  const timeoutPromise = new Promise((_, reject) => {
+    setTimeout(() => {
+      reject(new Error('Connection test timeout after 10 seconds'));
+    }, 10000);
   });
+  
+  const connectionPromise = supabase.from('user_tokens').select('count').limit(1);
+  
+  try {
+    const result = await Promise.race([connectionPromise, timeoutPromise]);
+    const { data, error } = result as any;
+    
+    if (error && error.code !== 'PGRST116') {
+      debugLog('Connection test failed', {
+        error: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint
+      }, true);
+      
+      alert(`❌ Database Connection Failed!\n\nError: ${error.message}\nCode: ${error.code}\n\nPlease check your Supabase configuration.`);
+    } else {
+      debugLog('✅ Connection test successful');
+    }
+  } catch (error: any) {
+    debugLog('Connection test exception', {
+      message: error.message,
+      stack: error.stack
+    }, true);
+    
+    alert(`❌ Connection Test Failed!\n\nError: ${error.message}\n\nThis might indicate network issues or incorrect Supabase configuration.`);
+  }
+};
+
+// Run connection test
+testConnection();
 
 // Database types
 export interface UserStatistics {
@@ -109,10 +163,12 @@ export interface Project {
   updated_at: string;
 }
 
-// API functions for blog posts
+// Enhanced API functions with debugging
 export const blogAPI = {
   async getAll(userId?: string) {
     try {
+      debugLog('📖 Fetching blog posts', { userId, hasUserId: !!userId });
+      
       let query = supabase
         .from('blog_posts')
         .select('*')
@@ -125,19 +181,24 @@ export const blogAPI = {
       }
       
       const { data, error } = await query;
+      
       if (error) {
-        console.error('❌ Error fetching blog posts:', error);
+        debugLog('Blog API getAll error', error, true);
         throw error;
       }
+      
+      debugLog('✅ Blog posts fetched successfully', { count: data?.length || 0 });
       return data;
     } catch (error) {
-      console.error('❌ Blog API getAll error:', error);
+      debugLog('Blog API getAll exception', error, true);
       throw error;
     }
   },
 
   async create(post: Omit<BlogPost, 'id' | 'created_at' | 'updated_at'>) {
     try {
+      debugLog('📝 Creating blog post', { title: post.title });
+      
       const { data, error } = await supabase
         .from('blog_posts')
         .insert([post])
@@ -145,18 +206,22 @@ export const blogAPI = {
         .single();
       
       if (error) {
-        console.error('❌ Error creating blog post:', error);
+        debugLog('Blog API create error', error, true);
         throw error;
       }
+      
+      debugLog('✅ Blog post created successfully', { id: data.id });
       return data;
     } catch (error) {
-      console.error('❌ Blog API create error:', error);
+      debugLog('Blog API create exception', error, true);
       throw error;
     }
   },
 
   async update(id: string, updates: Partial<BlogPost>) {
     try {
+      debugLog('✏️ Updating blog post', { id, updates });
+      
       const { data, error } = await supabase
         .from('blog_posts')
         .update(updates)
@@ -165,29 +230,35 @@ export const blogAPI = {
         .single();
       
       if (error) {
-        console.error('❌ Error updating blog post:', error);
+        debugLog('Blog API update error', error, true);
         throw error;
       }
+      
+      debugLog('✅ Blog post updated successfully', { id: data.id });
       return data;
     } catch (error) {
-      console.error('❌ Blog API update error:', error);
+      debugLog('Blog API update exception', error, true);
       throw error;
     }
   },
 
   async delete(id: string) {
     try {
+      debugLog('🗑️ Deleting blog post', { id });
+      
       const { error } = await supabase
         .from('blog_posts')
         .delete()
         .eq('id', id);
       
       if (error) {
-        console.error('❌ Error deleting blog post:', error);
+        debugLog('Blog API delete error', error, true);
         throw error;
       }
+      
+      debugLog('✅ Blog post deleted successfully', { id });
     } catch (error) {
-      console.error('❌ Blog API delete error:', error);
+      debugLog('Blog API delete exception', error, true);
       throw error;
     }
   }
@@ -197,6 +268,8 @@ export const blogAPI = {
 export const projectsAPI = {
   async getAll(userId?: string) {
     try {
+      debugLog('🚀 Fetching projects', { userId, hasUserId: !!userId });
+      
       let query = supabase
         .from('projects')
         .select('*')
@@ -207,19 +280,24 @@ export const projectsAPI = {
       }
       
       const { data, error } = await query;
+      
       if (error) {
-        console.error('❌ Error fetching projects:', error);
+        debugLog('Projects API getAll error', error, true);
         throw error;
       }
+      
+      debugLog('✅ Projects fetched successfully', { count: data?.length || 0 });
       return data;
     } catch (error) {
-      console.error('❌ Projects API getAll error:', error);
+      debugLog('Projects API getAll exception', error, true);
       throw error;
     }
   },
 
   async create(project: Omit<Project, 'id' | 'created_at' | 'updated_at'>) {
     try {
+      debugLog('🛠️ Creating project', { title: project.title });
+      
       const { data, error } = await supabase
         .from('projects')
         .insert([project])
@@ -227,18 +305,22 @@ export const projectsAPI = {
         .single();
       
       if (error) {
-        console.error('❌ Error creating project:', error);
+        debugLog('Projects API create error', error, true);
         throw error;
       }
+      
+      debugLog('✅ Project created successfully', { id: data.id });
       return data;
     } catch (error) {
-      console.error('❌ Projects API create error:', error);
+      debugLog('Projects API create exception', error, true);
       throw error;
     }
   },
 
   async update(id: string, updates: Partial<Project>) {
     try {
+      debugLog('🔧 Updating project', { id, updates });
+      
       const { data, error } = await supabase
         .from('projects')
         .update(updates)
@@ -247,29 +329,35 @@ export const projectsAPI = {
         .single();
       
       if (error) {
-        console.error('❌ Error updating project:', error);
+        debugLog('Projects API update error', error, true);
         throw error;
       }
+      
+      debugLog('✅ Project updated successfully', { id: data.id });
       return data;
     } catch (error) {
-      console.error('❌ Projects API update error:', error);
+      debugLog('Projects API update exception', error, true);
       throw error;
     }
   },
 
   async delete(id: string) {
     try {
+      debugLog('🗑️ Deleting project', { id });
+      
       const { error } = await supabase
         .from('projects')
         .delete()
         .eq('id', id);
       
       if (error) {
-        console.error('❌ Error deleting project:', error);
+        debugLog('Projects API delete error', error, true);
         throw error;
       }
+      
+      debugLog('✅ Project deleted successfully', { id });
     } catch (error) {
-      console.error('❌ Projects API delete error:', error);
+      debugLog('Projects API delete exception', error, true);
       throw error;
     }
   }
@@ -280,6 +368,8 @@ export const workEntriesAPI = {
   async getAnnualData(userId: string, year?: number) {
     try {
       const targetYear = year || new Date().getFullYear();
+      debugLog('📊 Fetching annual work data', { userId, targetYear });
+      
       const startDate = `${targetYear}-01-01`;
       const endDate = `${targetYear}-12-31`;
       
@@ -299,12 +389,14 @@ export const workEntriesAPI = {
         .order('entry_date', { ascending: true });
       
       if (error) {
-        console.error('❌ Error fetching annual work data:', error);
+        debugLog('Work entries API getAnnualData error', error, true);
         throw error;
       }
+      
+      debugLog('✅ Annual work data fetched successfully', { count: data?.length || 0 });
       return data;
     } catch (error) {
-      console.error('❌ Work entries API getAnnualData error:', error);
+      debugLog('Work entries API getAnnualData exception', error, true);
       throw error;
     }
   },
@@ -312,6 +404,8 @@ export const workEntriesAPI = {
   async getDailyTotals(userId: string, year?: number) {
     try {
       const targetYear = year || new Date().getFullYear();
+      debugLog('📈 Fetching daily totals', { userId, targetYear });
+      
       const startDate = `${targetYear}-01-01`;
       const endDate = `${targetYear}-12-31`;
       
@@ -323,7 +417,7 @@ export const workEntriesAPI = {
         .lte('entry_date', endDate);
       
       if (error) {
-        console.error('❌ Error fetching daily totals:', error);
+        debugLog('Work entries API getDailyTotals error', error, true);
         throw error;
       }
       
@@ -334,9 +428,14 @@ export const workEntriesAPI = {
         return acc;
       }, {} as Record<string, number>);
       
+      debugLog('✅ Daily totals calculated successfully', { 
+        entryCount: data?.length || 0,
+        uniqueDays: Object.keys(dailyTotals).length 
+      });
+      
       return dailyTotals;
     } catch (error) {
-      console.error('❌ Work entries API getDailyTotals error:', error);
+      debugLog('Work entries API getDailyTotals exception', error, true);
       throw error;
     }
   }
