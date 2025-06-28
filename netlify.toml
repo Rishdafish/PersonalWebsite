@@ -11,3 +11,7 @@
   from = "/*"
   to = "/index.html"
   status = 200
+
+# Add this section to help with debugging
+[context.production.environment]
+  NODE_ENV = "production"
