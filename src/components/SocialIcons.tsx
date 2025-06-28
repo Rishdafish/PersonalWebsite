@@ -25,7 +25,7 @@ const SocialIcons: React.FC = () => {
         <Linkedin size={20} />
       </a>
       <a 
-        href="https://github.com/rishi-biry" 
+        href="https://github.com/Rishdafish" 
         target="_blank" 
         rel="noopener noreferrer"
         className="social-icon github interactive"
@@ -34,7 +34,7 @@ const SocialIcons: React.FC = () => {
         <Github size={20} />
       </a>
       <a 
-        href="https://kaggle.com/rishi-biry" 
+        href="https://www.kaggle.com/rishidafish" 
         target="_blank" 
         rel="noopener noreferrer"
         className="social-icon kaggle interactive"
