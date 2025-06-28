@@ -5,6 +5,9 @@
 [build.environment]
   NODE_VERSION = "18"
   NPM_CONFIG_PRODUCTION = "false"
+  # Supabase environment variables will be set in Netlify dashboard
+  # VITE_SUPABASE_URL = "your_supabase_url"
+  # VITE_SUPABASE_ANON_KEY = "your_anon_key"
 
 [[redirects]]
   from = "/*"
