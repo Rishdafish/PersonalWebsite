@@ -22,9 +22,9 @@ debugLog('Environment check:', {
   urlLength: supabaseUrl?.length || 0,
   keyLength: supabaseAnonKey?.length || 0,
   nodeEnv: import.meta.env.MODE,
-  // Show actual values for debugging (remove in production)
-  actualUrl: supabaseUrl,
-  actualKey: supabaseAnonKey ? `${supabaseAnonKey.substring(0, 20)}...` : 'MISSING'
+  // Show first/last chars for debugging
+  urlPreview: supabaseUrl ? `${supabaseUrl.substring(0, 20)}...${supabaseUrl.substring(supabaseUrl.length - 10)}` : 'MISSING',
+  keyPreview: supabaseAnonKey ? `${supabaseAnonKey.substring(0, 20)}...${supabaseAnonKey.substring(supabaseAnonKey.length - 10)}` : 'MISSING'
 });
 
 if (!supabaseUrl || !supabaseAnonKey) {
@@ -56,24 +56,64 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 
 debugLog('✅ Supabase client created successfully');
 
-// Enhanced connection test with shorter timeout for faster feedback
+// Enhanced connection test with multiple fallbacks
 const testConnection = async () => {
-  debugLog('🔍 Starting connection test...');
+  debugLog('🔍 Starting comprehensive connection test...');
   
-  const timeoutPromise = new Promise((_, reject) => {
-    setTimeout(() => {
-      reject(new Error('Connection test timeout after 5 seconds'));
-    }, 5000);
-  });
-  
-  const connectionPromise = supabase.from('user_tokens').select('count').limit(1);
-  
+  // Test 1: Basic ping with very short timeout
   try {
-    const result = await Promise.race([connectionPromise, timeoutPromise]);
+    debugLog('Test 1: Basic connectivity test...');
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
+    
+    const response = await fetch(`${supabaseUrl}/rest/v1/`, {
+      method: 'HEAD',
+      headers: {
+        'apikey': supabaseAnonKey,
+        'Authorization': `Bearer ${supabaseAnonKey}`
+      },
+      signal: controller.signal
+    });
+    
+    clearTimeout(timeoutId);
+    
+    debugLog('✅ Basic connectivity test passed', { 
+      status: response.status,
+      statusText: response.statusText 
+    });
+    
+  } catch (error: any) {
+    debugLog('❌ Basic connectivity test failed', {
+      message: error.message,
+      name: error.name,
+      code: error.code
+    }, true);
+    
+    // If basic connectivity fails, don't proceed with database tests
+    return;
+  }
+  
+  // Test 2: Simple database query with timeout
+  try {
+    debugLog('Test 2: Database query test...');
+    
+    const queryPromise = supabase
+      .from('user_tokens')
+      .select('count')
+      .limit(1);
+    
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => {
+        reject(new Error('Database query timeout after 3 seconds'));
+      }, 3000);
+    });
+    
+    const result = await Promise.race([queryPromise, timeoutPromise]);
     const { data, error } = result as any;
     
     if (error && error.code !== 'PGRST116') {
-      debugLog('Connection test failed', {
+      debugLog('❌ Database query test failed', {
         error: error.message,
         code: error.code,
         details: error.details,
@@ -81,17 +121,39 @@ const testConnection = async () => {
         status: error.status
       }, true);
     } else {
-      debugLog('✅ Connection test successful');
+      debugLog('✅ Database query test passed');
     }
+    
   } catch (error: any) {
-    debugLog('Connection test exception', {
+    debugLog('❌ Database query test exception', {
+      message: error.message,
+      stack: error.stack
+    }, true);
+  }
+  
+  // Test 3: Check if we can access auth
+  try {
+    debugLog('Test 3: Auth service test...');
+    
+    const { data: session, error: authError } = await supabase.auth.getSession();
+    
+    if (authError) {
+      debugLog('❌ Auth service test failed', authError, true);
+    } else {
+      debugLog('✅ Auth service test passed', { 
+        hasSession: !!session.session 
+      });
+    }
+    
+  } catch (error: any) {
+    debugLog('❌ Auth service test exception', {
       message: error.message,
       stack: error.stack
     }, true);
   }
 };
 
-// Run connection test
+// Run connection test immediately
 testConnection();
 
 // Database types

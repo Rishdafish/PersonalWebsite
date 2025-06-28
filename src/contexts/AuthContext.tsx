@@ -82,10 +82,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     // Set a maximum loading time to prevent infinite loading
     loadingTimeout = setTimeout(() => {
       if (mounted) {
-        authError('Auth loading timeout reached after 5 seconds');
+        authError('Auth loading timeout reached after 3 seconds');
         setLoading(false);
       }
-    }, 5000);
+    }, 3000);
 
     // Get initial session
     const getInitialSession = async () => {
@@ -181,107 +181,107 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         id: authUser.id 
       });
 
-      // Step 1: Test basic database connectivity
+      // Step 1: Test basic database connectivity with shorter timeout
       authDebug('🔍 Step 1: Testing database connectivity...');
       try {
-        const { data: testData, error: testError } = await supabase
-          .from('user_profiles')
-          .select('count')
-          .limit(1);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2000); // 2 second timeout
         
-        if (testError) {
-          authError('Database connectivity test failed', testError);
-          createFallbackUser(authUser);
-          return;
+        const connectivityTest = fetch(`${import.meta.env.VITE_SUPABASE_URL}/rest/v1/user_profiles?select=count&limit=1`, {
+          method: 'GET',
+          headers: {
+            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+            'Content-Type': 'application/json'
+          },
+          signal: controller.signal
+        });
+        
+        const response = await connectivityTest;
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
-        authDebug('✅ Database connectivity test passed');
-      } catch (connectError) {
-        authError('Database connectivity exception', connectError);
+        
+        authDebug('✅ Database connectivity test passed', { 
+          status: response.status,
+          statusText: response.statusText 
+        });
+      } catch (connectError: any) {
+        authError('Database connectivity test failed', {
+          message: connectError.message,
+          name: connectError.name,
+          code: connectError.code
+        });
+        
+        // If connectivity fails, create fallback user immediately
         createFallbackUser(authUser);
         return;
       }
 
-      // Step 2: Check if user_profiles table exists and has correct structure
-      authDebug('🔍 Step 2: Checking table structure...');
+      // Step 2: Try to get existing profile with timeout
+      authDebug('🔍 Step 2: Querying for existing profile...');
       try {
-        const { data: tableCheck, error: tableError } = await supabase
-          .rpc('check_trigger_status');
-        
-        if (tableError) {
-          authError('Table structure check failed', tableError);
-        } else {
-          authDebug('📋 Table structure check result', tableCheck);
+        const profilePromise = supabase
+          .from('user_profiles')
+          .select('*')
+          .eq('id', authUser.id)
+          .maybeSingle();
+
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => {
+            reject(new Error('Profile query timeout after 2 seconds'));
+          }, 2000);
+        });
+
+        const result = await Promise.race([profilePromise, timeoutPromise]);
+        const { data: profile, error: profileError } = result as any;
+
+        authDebug('📥 Profile query response', {
+          hasData: !!profile,
+          hasError: !!profileError,
+          errorCode: profileError?.code,
+          errorMessage: profileError?.message,
+          profileData: profile
+        });
+
+        if (profileError && profileError.code !== 'PGRST116') {
+          authError('Error loading user profile', profileError);
+          authDebug('🛠️ Attempting manual profile creation due to query error...');
+          await createUserProfileManually(authUser);
+          return;
         }
-      } catch (structureError) {
-        authError('Table structure check exception', structureError);
-      }
 
-      // Step 3: Try to get existing profile with detailed logging
-      authDebug('🔍 Step 3: Querying for existing profile...');
-      const profileQuery = supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('id', authUser.id);
-
-      authDebug('📤 Executing profile query', {
-        userId: authUser.id,
-        query: 'SELECT * FROM user_profiles WHERE id = $1'
-      });
-
-      const { data: profile, error: profileError } = await profileQuery.maybeSingle();
-
-      authDebug('📥 Profile query response', {
-        hasData: !!profile,
-        hasError: !!profileError,
-        errorCode: profileError?.code,
-        errorMessage: profileError?.message,
-        profileData: profile
-      });
-
-      if (profileError && profileError.code !== 'PGRST116') {
-        authError('Error loading user profile', {
-          code: profileError.code,
-          message: profileError.message,
-          details: profileError.details,
-          hint: profileError.hint
-        });
-        
-        // Try manual creation
-        authDebug('🛠️ Attempting manual profile creation due to query error...');
-        await createUserProfileManually(authUser);
-        return;
-      }
-
-      if (profile) {
-        authDebug('✅ Profile loaded successfully', {
-          email: profile.email,
-          role: profile.role,
-          id: profile.id,
-          tokenUsed: profile.token_used
-        });
-        
-        setUserProfile(profile);
-        setUser({
-          id: profile.id,
-          email: profile.email,
-          role: profile.role,
-          isAdmin: profile.role === 'admin',
-          isSpecialized: profile.role === 'specialized',
-          isRegular: profile.role === 'regular'
-        });
-        
-        authDebug('✅ User state updated successfully');
-      } else {
-        authDebug('⚠️ No profile found (PGRST116 or null result), creating manually...');
+        if (profile) {
+          authDebug('✅ Profile loaded successfully', {
+            email: profile.email,
+            role: profile.role,
+            id: profile.id
+          });
+          
+          setUserProfile(profile);
+          setUser({
+            id: profile.id,
+            email: profile.email,
+            role: profile.role,
+            isAdmin: profile.role === 'admin',
+            isSpecialized: profile.role === 'specialized',
+            isRegular: profile.role === 'regular'
+          });
+          
+          authDebug('✅ User state updated successfully');
+        } else {
+          authDebug('⚠️ No profile found, creating manually...');
+          await createUserProfileManually(authUser);
+        }
+      } catch (queryError: any) {
+        authError('Profile query exception', queryError);
+        authDebug('🛠️ Attempting manual profile creation due to exception...');
         await createUserProfileManually(authUser);
       }
     } catch (error) {
-      authError('Exception in loadUserProfile', {
-        message: error instanceof Error ? error.message : 'Unknown error',
-        stack: error instanceof Error ? error.stack : undefined,
-        error
-      });
-      
+      authError('Exception in loadUserProfile', error);
       authDebug('🆘 Falling back to manual profile creation due to exception...');
       await createUserProfileManually(authUser);
     }
@@ -297,33 +297,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const token = authUser.user_metadata?.token;
       authDebug('🎫 Token from metadata', { 
         hasToken: !!token, 
-        token: token || 'none',
-        allMetadata: authUser.user_metadata
+        token: token || 'none'
       });
 
-      // Step 1: Test the manual creation function exists
-      authDebug('🔍 Testing manual creation function availability...');
-      try {
-        const { data: functionTest, error: functionError } = await supabase
-          .rpc('check_trigger_status');
-        
-        if (functionError) {
-          authError('Function availability test failed', functionError);
-        } else {
-          authDebug('✅ Functions are available', functionTest);
-        }
-      } catch (funcError) {
-        authError('Function test exception', funcError);
-      }
-
-      // Step 2: Call the manual creation function
-      authDebug('📤 Calling create_user_profile_manual function...');
-      const { data: newProfile, error: createError } = await supabase
+      // Try manual creation with timeout
+      const manualCreationPromise = supabase
         .rpc('create_user_profile_manual', {
           user_id: authUser.id,
           user_email: authUser.email || '',
           user_token: token || null
         });
+
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => {
+          reject(new Error('Manual creation timeout after 3 seconds'));
+        }, 3000);
+      });
+
+      const result = await Promise.race([manualCreationPromise, timeoutPromise]);
+      const { data: newProfile, error: createError } = result as any;
 
       authDebug('📥 Manual creation response', {
         hasData: !!newProfile,
@@ -334,13 +326,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       });
 
       if (createError) {
-        authError('Error creating profile manually', {
-          code: createError.code,
-          message: createError.message,
-          details: createError.details,
-          hint: createError.hint
-        });
-        
+        authError('Error creating profile manually', createError);
         authDebug('🆘 Manual creation failed, using fallback...');
         createFallbackUser(authUser);
         return;
@@ -364,13 +350,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         createFallbackUser(authUser);
       }
 
-    } catch (error) {
-      authError('Exception creating user profile manually', {
-        message: error instanceof Error ? error.message : 'Unknown error',
-        stack: error instanceof Error ? error.stack : undefined,
-        error
-      });
-      
+    } catch (error: any) {
+      authError('Exception creating user profile manually', error);
       authDebug('🆘 Manual creation exception, using fallback...');
       createFallbackUser(authUser);
     }
@@ -408,39 +389,21 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         length: token.length 
       });
       
-      // Test database connection first
-      const { data: connectionTest, error: connectionError } = await supabase
-        .from('user_tokens')
-        .select('count')
-        .limit(1);
-      
-      if (connectionError) {
-        authError('Database connection failed during token validation', connectionError);
-        return false;
-      }
-      
-      authDebug('✅ Database connection successful for token validation');
-      
-      // Get all tokens for debugging
-      const { data: allTokens, error: allTokensError } = await supabase
-        .from('user_tokens')
-        .select('*');
-      
-      if (allTokensError) {
-        authError('Error fetching all tokens', allTokensError);
-      } else {
-        authDebug('📋 All tokens in database', { 
-          count: allTokens?.length || 0,
-          tokens: allTokens?.map(t => ({ token: t.token, active: t.is_active }))
-        });
-      }
-      
-      // Perform specific validation
-      const { data, error } = await supabase
+      // Quick validation with timeout
+      const validationPromise = supabase
         .from('user_tokens')
         .select('*')
         .eq('token', token)
         .eq('is_active', true);
+
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => {
+          reject(new Error('Token validation timeout after 2 seconds'));
+        }, 2000);
+      });
+
+      const result = await Promise.race([validationPromise, timeoutPromise]);
+      const { data, error } = result as any;
 
       if (error) {
         authError('Error in token validation query', error);
@@ -544,26 +507,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           emailConfirmed: !!data.user.email_confirmed_at
         });
         
-        // Wait for profile creation
-        setTimeout(async () => {
-          try {
-            const { data: existingProfile } = await supabase
-              .from('user_profiles')
-              .select('*')
-              .eq('id', data.user!.id)
-              .maybeSingle();
-            
-            if (!existingProfile) {
-              authDebug('⚠️ Profile not created by trigger, creating manually...');
-              await createUserProfileManually(data.user!);
-            } else {
-              authDebug('✅ Profile exists from trigger', existingProfile);
-            }
-          } catch (error) {
-            authError('Error checking/creating profile after registration', error);
-          }
-        }, 1000);
-        
         return true;
       }
 
@@ -606,16 +549,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const hasHoursAccess = isAdmin || isSpecialized;
   const canComment = isAdmin || isSpecialized;
   const canEditContent = isAdmin;
-
-  authDebug('📊 Current auth state', {
-    loading,
-    isAuthenticated,
-    userEmail: user?.email,
-    userRole: user?.role,
-    hasHoursAccess,
-    canComment,
-    canEditContent
-  });
 
   return (
     <AuthContext.Provider value={{
