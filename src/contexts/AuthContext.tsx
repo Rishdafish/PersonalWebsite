@@ -300,12 +300,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         token: token || 'none'
       });
 
-      // Try manual creation with timeout
+      // Try manual creation with timeout - using correct parameter names
       const manualCreationPromise = supabase
         .rpc('create_user_profile_manual', {
-          user_id: authUser.id,
-          user_email: authUser.email || '',
-          user_token: token || null
+          p_user_id: authUser.id,
+          p_user_email: authUser.email || '',
+          p_user_token: token || null
         });
 
       const timeoutPromise = new Promise((_, reject) => {
