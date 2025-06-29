@@ -112,15 +112,6 @@ const Header: React.FC = () => {
                 >
                   Hours
                 </Link>
-                {isAuthenticated && (
-                  <Link 
-                    to="/admin-diagnostic" 
-                    className={`dropdown-item ${isProjectsPage || isBlogPage ? 'inverse' : ''} interactive`}
-                    onClick={() => setIsDropdownOpen(false)}
-                  >
-                    Diagnostic
-                  </Link>
-                )}
               </div>
             )}
           </div>

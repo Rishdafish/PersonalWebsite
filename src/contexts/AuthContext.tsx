@@ -82,10 +82,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     // Set a maximum loading time to prevent infinite loading
     loadingTimeout = setTimeout(() => {
       if (mounted) {
-        authError('Auth loading timeout reached after 10 seconds');
+        authError('Auth loading timeout reached after 3 seconds');
         setLoading(false);
       }
-    }, 10000);
+    }, 3000);
 
     // Get initial session
     const getInitialSession = async () => {
@@ -181,35 +181,62 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         id: authUser.id 
       });
 
-      // Step 1: Test basic database connectivity
+      // Step 1: Test basic database connectivity with shorter timeout
       authDebug('🔍 Step 1: Testing database connectivity...');
       try {
-        const connectivityTest = await supabase
-          .from('user_profiles')
-          .select('count')
-          .limit(1);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2000); // 2 second timeout
         
-        if (connectivityTest.error) {
-          throw connectivityTest.error;
+        const connectivityTest = fetch(`${import.meta.env.VITE_SUPABASE_URL}/rest/v1/user_profiles?select=count&limit=1`, {
+          method: 'GET',
+          headers: {
+            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+            'Content-Type': 'application/json'
+          },
+          signal: controller.signal
+        });
+        
+        const response = await connectivityTest;
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
         
-        authDebug('✅ Database connectivity test passed');
+        authDebug('✅ Database connectivity test passed', { 
+          status: response.status,
+          statusText: response.statusText 
+        });
       } catch (connectError: any) {
-        authError('Database connectivity test failed', connectError);
+        authError('Database connectivity test failed', {
+          message: connectError.message,
+          name: connectError.name,
+          code: connectError.code
+        });
         
         // If connectivity fails, create fallback user immediately
         createFallbackUser(authUser);
         return;
       }
 
-      // Step 2: Try to get existing profile
+      // Step 2: Try to get existing profile with timeout
       authDebug('🔍 Step 2: Querying for existing profile...');
       try {
-        const { data: profile, error: profileError } = await supabase
+        const profilePromise = supabase
           .from('user_profiles')
           .select('*')
           .eq('id', authUser.id)
           .maybeSingle();
+
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => {
+            reject(new Error('Profile query timeout after 5 seconds'));
+          }, 5000);
+        });
+
+        const result = await Promise.race([profilePromise, timeoutPromise]);
+        const { data: profile, error: profileError } = result as any;
 
         authDebug('📥 Profile query response', {
           hasData: !!profile,
@@ -273,13 +300,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         token: token || 'none'
       });
 
-      // Try manual creation with correct parameter names
-      const { data: newProfile, error: createError } = await supabase
+      // Try manual creation with timeout
+      const manualCreationPromise = supabase
         .rpc('create_user_profile_manual', {
-          p_user_id: authUser.id,
-          p_user_email: authUser.email || '',
-          p_user_token: token || null
+          user_id: authUser.id,
+          user_email: authUser.email || '',
+          user_token: token || null
         });
+
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => {
+          reject(new Error('Manual creation timeout after 3 seconds'));
+        }, 3000);
+      });
+
+      const result = await Promise.race([manualCreationPromise, timeoutPromise]);
+      const { data: newProfile, error: createError } = result as any;
 
       authDebug('📥 Manual creation response', {
         hasData: !!newProfile,
@@ -353,12 +389,21 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         length: token.length 
       });
       
-      // Token validation without aggressive timeout
-      const { data, error } = await supabase
+      // Quick validation with timeout
+      const validationPromise = supabase
         .from('user_tokens')
         .select('*')
         .eq('token', token)
         .eq('is_active', true);
+
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => {
+          reject(new Error('Token validation timeout after 2 seconds'));
+        }, 2000);
+      });
+
+      const result = await Promise.race([validationPromise, timeoutPromise]);
+      const { data, error } = result as any;
 
       if (error) {
         authError('Error in token validation query', error);
