@@ -8,6 +8,7 @@ import Home from './pages/Home';
 import Blog from './pages/Blog';
 import Hours from './pages/Hours';
 import Projects from './pages/Projects';
+import AdminDiagnostic from './pages/AdminDiagnostic';
 import StarField from './components/StarField';
 import ProtectedRoute from './components/ProtectedRoute';
 import './App.css';
@@ -37,6 +38,11 @@ function App() {
                 <Route path="/projects" element={
                   <ProtectedRoute requireRole="authenticated" feature="the projects page">
                     <Projects />
+                  </ProtectedRoute>
+                } />
+                <Route path="/admin-diagnostic" element={
+                  <ProtectedRoute requireRole="authenticated" feature="the admin diagnostic panel">
+                    <AdminDiagnostic />
                   </ProtectedRoute>
                 } />
               </Routes>
