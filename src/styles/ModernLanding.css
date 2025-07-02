@@ -1,0 +1,230 @@
+/* Modern Landing Page Styles */
+
+.modern-landing-container {
+  position: relative;
+  min-height: 100vh;
+  background: #0a0a0a;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="8" fill="white" stroke="black" stroke-width="1"/></svg>') 10 10, auto;
+}
+
+/* Animated Starfield */
+.starfield {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: #333333;
+  transition: background-color 0.4s ease;
+  z-index: 1;
+}
+
+.starfield.hovered {
+  background: #555555;
+}
+
+.animated-star {
+  position: absolute;
+  background: white;
+  border-radius: 50%;
+  animation: starTwinkle infinite ease-in-out;
+}
+
+@keyframes starTwinkle {
+  0%, 100% { 
+    opacity: 0.2;
+    transform: scale(1);
+  }
+  50% { 
+    opacity: 1;
+    transform: scale(1.2);
+  }
+}
+
+/* Central Zeta Symbol */
+.zeta-container {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modern-zeta-symbol {
+  font-size: 8rem;
+  font-family: 'Times New Roman', serif;
+  font-weight: normal;
+  color: #333333;
+  text-shadow: 0 0 20px rgba(51, 51, 51, 0.3);
+  user-select: none;
+  line-height: 1;
+  text-align: center;
+  transition: all 0.4s ease;
+  cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="white" stroke-width="2"/></svg>') 12 12, pointer;
+}
+
+.modern-zeta-symbol:hover {
+  color: white;
+  text-shadow: 0 0 40px rgba(255, 255, 255, 0.8), 0 0 60px rgba(255, 255, 255, 0.4);
+  transform: scale(1.1);
+  animation: zetaPulse 2s ease-in-out infinite;
+}
+
+@keyframes zetaPulse {
+  0%, 100% { 
+    text-shadow: 0 0 40px rgba(255, 255, 255, 0.8), 0 0 60px rgba(255, 255, 255, 0.4);
+  }
+  50% { 
+    text-shadow: 0 0 60px rgba(255, 255, 255, 1), 0 0 80px rgba(255, 255, 255, 0.6);
+  }
+}
+
+/* Side Navigation */
+.side-navigation {
+  position: fixed;
+  right: 40px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  z-index: 20;
+}
+
+.nav-button {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: #333333;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  transition: all 0.4s ease;
+  border: 2px solid transparent;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+  cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="white" stroke-width="2"/></svg>') 12 12, pointer;
+}
+
+.nav-button:hover {
+  background: #666666;
+  transform: scale(1.15);
+  box-shadow: 0 8px 25px rgba(255, 255, 255, 0.2), 0 0 30px rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.nav-button.linkedin:hover {
+  background: #0077b5;
+  box-shadow: 0 8px 25px rgba(0, 119, 181, 0.4), 0 0 30px rgba(0, 119, 181, 0.2);
+}
+
+.nav-button.github:hover {
+  background: #24292e;
+  box-shadow: 0 8px 25px rgba(36, 41, 46, 0.4), 0 0 30px rgba(36, 41, 46, 0.2);
+}
+
+.nav-button.kaggle:hover {
+  background: #20beff;
+  box-shadow: 0 8px 25px rgba(32, 190, 255, 0.4), 0 0 30px rgba(32, 190, 255, 0.2);
+}
+
+/* Footer */
+.modern-footer {
+  position: fixed;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+}
+
+.footer-content {
+  text-align: center;
+  color: rgba(255, 255, 255, 0.8);
+  font-family: 'Inter', sans-serif;
+}
+
+.name {
+  font-size: 1.1rem;
+  font-weight: 600;
+  letter-spacing: 1px;
+  display: block;
+  margin-bottom: 4px;
+  text-transform: capitalize;
+}
+
+.copyright {
+  font-size: 0.85rem;
+  font-weight: 400;
+  opacity: 0.7;
+  display: block;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .modern-zeta-symbol {
+    font-size: 5rem;
+  }
+  
+  .side-navigation {
+    right: 20px;
+    gap: 20px;
+  }
+  
+  .nav-button {
+    width: 50px;
+    height: 50px;
+  }
+  
+  .nav-button svg {
+    width: 20px;
+    height: 20px;
+  }
+  
+  .name {
+    font-size: 1rem;
+  }
+  
+  .copyright {
+    font-size: 0.8rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .modern-zeta-symbol {
+    font-size: 4rem;
+  }
+  
+  .side-navigation {
+    right: 15px;
+    gap: 16px;
+  }
+  
+  .nav-button {
+    width: 45px;
+    height: 45px;
+  }
+  
+  .nav-button svg {
+    width: 18px;
+    height: 18px;
+  }
+}
+
+/* Smooth transitions for all interactive elements */
+* {
+  transition: transform 0.3s ease, background-color 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* Enhanced cursor effects */
+.nav-button:active {
+  transform: scale(1.05);
+}
+
+.modern-zeta-symbol:active {
+  transform: scale(1.05);
+}
