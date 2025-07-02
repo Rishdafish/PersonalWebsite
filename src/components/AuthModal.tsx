@@ -21,27 +21,16 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
   
   const { login, register, validateToken } = useAuth();
 
-  // Debug function for modal - console only
-  const modalDebug = (message: string, data?: any) => {
-    const timestamp = new Date().toLocaleTimeString();
-    console.log(`🔐 [AUTH MODAL] [${timestamp}] ${message}`, data || '');
-  };
-
   const handleTokenValidation = async (tokenValue: string) => {
     if (!tokenValue.trim()) {
-      modalDebug('Empty token, resetting validation state');
       setTokenValidated(null);
       return;
     }
-
-    modalDebug('Starting token validation', { token: tokenValue, length: tokenValue.length });
     
     try {
       const isValid = await validateToken(tokenValue);
       setTokenValidated(isValid);
-      modalDebug('Token validation result', { isValid });
     } catch (error) {
-      modalDebug('Token validation error', error);
       setTokenValidated(false);
     }
   };
@@ -51,32 +40,24 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
     setError('');
     setLoading(true);
 
-    modalDebug('Form submitted', { 
-      isLogin, 
-      email, 
-      hasToken: !!token,
-      tokenValidated
-    });
-
     try {
       if (!isLogin) {
         // Registration validation
         if (password !== confirmPassword) {
           setError('Passwords do not match');
+          setLoading(false);
           return;
         }
         if (password.length < 6) {
           setError('Password must be at least 6 characters');
+          setLoading(false);
           return;
         }
         
         // Validate token if provided
         if (token && tokenValidated !== true) {
-          modalDebug('Token validation failed before submission', {
-            token,
-            tokenValidated
-          });
           setError('Please enter a valid token or leave empty for regular access');
+          setLoading(false);
           return;
         }
       }
@@ -84,28 +65,22 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
       let success = false;
       
       if (isLogin) {
-        modalDebug('Attempting login');
         success = await login(email, password);
         if (!success) {
           setError('Invalid email or password. Please check your credentials and try again.');
         }
       } else {
-        modalDebug('Attempting registration', { hasToken: !!token });
         success = await register(email, password, token || undefined);
         if (!success) {
           setError('Registration failed. Please check your details and try again.');
         }
       }
 
-      modalDebug('Auth operation result', { success });
-
       if (success) {
-        modalDebug('Auth successful, calling onAuthSuccess');
         resetForm();
         onAuthSuccess();
       }
     } catch (err: any) {
-      modalDebug('Auth error in modal', err);
       setError(err.message || 'An error occurred. Please try again.');
     } finally {
       setLoading(false);
@@ -143,8 +118,6 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, onAuthSuccess }) => {
 
   const handleTokenChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newToken = e.target.value;
-    modalDebug('Token input changed', { newValue: newToken, length: newToken.length });
-    
     setToken(newToken);
     handleTokenValidation(newToken);
   };

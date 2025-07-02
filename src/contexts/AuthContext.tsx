@@ -51,23 +51,6 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
-// Console-only debugging functions
-const authDebug = (message: string, data?: any) => {
-  const timestamp = new Date().toISOString();
-  const prefix = '🔐 [AUTH DEBUG]';
-  
-  if (data !== undefined) {
-    console.log(`${prefix} ${timestamp}: ${message}`, data);
-  } else {
-    console.log(`${prefix} ${timestamp}: ${message}`);
-  }
-};
-
-const authError = (message: string, error?: any) => {
-  const timestamp = new Date().toISOString();
-  console.error(`❌ [AUTH ERROR] ${timestamp}: ${message}`, error);
-};
-
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -77,12 +60,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     let mounted = true;
     let loadingTimeout: NodeJS.Timeout;
 
-    authDebug('🚀 AuthProvider useEffect started');
-
     // Set a maximum loading time to prevent infinite loading
     loadingTimeout = setTimeout(() => {
       if (mounted) {
-        authError('Auth loading timeout reached after 3 seconds');
+        console.error('Auth loading timeout reached after 3 seconds');
         setLoading(false);
       }
     }, 3000);
@@ -90,12 +71,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     // Get initial session
     const getInitialSession = async () => {
       try {
-        authDebug('🔍 Getting initial session...');
-        
         const { data: { session }, error } = await supabase.auth.getSession();
         
         if (error) {
-          authError('Error getting session', error);
+          console.error('Error getting session', error);
           await supabase.auth.signOut();
           if (mounted) {
             setUser(null);
@@ -106,18 +85,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
 
         if (session?.user && mounted) {
-          authDebug('✅ Found existing session', { 
-            userEmail: session.user.email,
-            userId: session.user.id 
-          });
           await loadUserProfile(session.user);
         } else if (mounted) {
-          authDebug('ℹ️ No existing session found');
           setUser(null);
           setUserProfile(null);
         }
       } catch (error) {
-        authError('Exception in getInitialSession', error);
+        console.error('Exception in getInitialSession', error);
         await supabase.auth.signOut();
         if (mounted) {
           setUser(null);
@@ -127,7 +101,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         if (mounted) {
           clearTimeout(loadingTimeout);
           setLoading(false);
-          authDebug('✅ Initial session check complete');
         }
       }
     };
@@ -139,16 +112,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       async (event, session) => {
         if (!mounted) return;
 
-        authDebug('🔄 Auth state changed', { 
-          event, 
-          userEmail: session?.user?.email || 'no user',
-          hasSession: !!session 
-        });
-
         clearTimeout(loadingTimeout);
 
         if (event === 'SIGNED_OUT' || !session?.user) {
-          authDebug('👋 User signed out or no user');
           setUser(null);
           setUserProfile(null);
           setLoading(false);
@@ -156,7 +122,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
 
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-          authDebug('🔑 User signed in or token refreshed');
           if (session?.user) {
             await loadUserProfile(session.user);
           }
@@ -170,170 +135,62 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       mounted = false;
       clearTimeout(loadingTimeout);
       subscription.unsubscribe();
-      authDebug('🧹 AuthProvider cleanup completed');
     };
   }, []);
 
   const loadUserProfile = async (authUser: SupabaseUser) => {
     try {
-      authDebug('👤 Loading profile for user', { 
-        email: authUser.email, 
-        id: authUser.id 
-      });
+      // Try to get existing profile
+      const { data: profile, error: profileError } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('id', authUser.id)
+        .maybeSingle();
 
-      // Step 1: Test basic database connectivity with shorter timeout
-      authDebug('🔍 Step 1: Testing database connectivity...');
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 2000); // 2 second timeout
-        
-        const connectivityTest = fetch(`${import.meta.env.VITE_SUPABASE_URL}/rest/v1/user_profiles?select=count&limit=1`, {
-          method: 'GET',
-          headers: {
-            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-            'Content-Type': 'application/json'
-          },
-          signal: controller.signal
-        });
-        
-        const response = await connectivityTest;
-        clearTimeout(timeoutId);
-        
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-        
-        authDebug('✅ Database connectivity test passed', { 
-          status: response.status,
-          statusText: response.statusText 
-        });
-      } catch (connectError: any) {
-        authError('Database connectivity test failed', {
-          message: connectError.message,
-          name: connectError.name,
-          code: connectError.code
-        });
-        
-        // If connectivity fails, create fallback user immediately
-        createFallbackUser(authUser);
+      if (profileError && profileError.code !== 'PGRST116') {
+        console.error('Error loading user profile', profileError);
+        await createUserProfileManually(authUser);
         return;
       }
 
-      // Step 2: Try to get existing profile with timeout
-      authDebug('🔍 Step 2: Querying for existing profile...');
-      try {
-        const profilePromise = supabase
-          .from('user_profiles')
-          .select('*')
-          .eq('id', authUser.id)
-          .maybeSingle();
-
-        const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => {
-            reject(new Error('Profile query timeout after 10 seconds'));
-          }, 10000);
+      if (profile) {
+        setUserProfile(profile);
+        setUser({
+          id: profile.id,
+          email: profile.email,
+          role: profile.role,
+          isAdmin: profile.role === 'admin',
+          isSpecialized: profile.role === 'specialized',
+          isRegular: profile.role === 'regular'
         });
-
-        const result = await Promise.race([profilePromise, timeoutPromise]);
-        const { data: profile, error: profileError } = result as any;
-
-        authDebug('📥 Profile query response', {
-          hasData: !!profile,
-          hasError: !!profileError,
-          errorCode: profileError?.code,
-          errorMessage: profileError?.message,
-          profileData: profile
-        });
-
-        if (profileError && profileError.code !== 'PGRST116') {
-          authError('Error loading user profile', profileError);
-          authDebug('🛠️ Attempting manual profile creation due to query error...');
-          await createUserProfileManually(authUser);
-          return;
-        }
-
-        if (profile) {
-          authDebug('✅ Profile loaded successfully', {
-            email: profile.email,
-            role: profile.role,
-            id: profile.id
-          });
-          
-          setUserProfile(profile);
-          setUser({
-            id: profile.id,
-            email: profile.email,
-            role: profile.role,
-            isAdmin: profile.role === 'admin',
-            isSpecialized: profile.role === 'specialized',
-            isRegular: profile.role === 'regular'
-          });
-          
-          authDebug('✅ User state updated successfully');
-        } else {
-          authDebug('⚠️ No profile found, creating manually...');
-          await createUserProfileManually(authUser);
-        }
-      } catch (queryError: any) {
-        authError('Profile query exception', queryError);
-        authDebug('🛠️ Attempting manual profile creation due to exception...');
+      } else {
         await createUserProfileManually(authUser);
       }
     } catch (error) {
-      authError('Exception in loadUserProfile', error);
-      authDebug('🆘 Falling back to manual profile creation due to exception...');
+      console.error('Exception in loadUserProfile', error);
       await createUserProfileManually(authUser);
     }
   };
 
   const createUserProfileManually = async (authUser: SupabaseUser) => {
     try {
-      authDebug('🛠️ Creating user profile manually', { 
-        email: authUser.email,
-        userId: authUser.id 
-      });
-      
       const token = authUser.user_metadata?.token;
-      authDebug('🎫 Token from metadata', { 
-        hasToken: !!token, 
-        token: token || 'none'
-      });
 
-      // Try manual creation with timeout - using correct parameter names
-      const manualCreationPromise = supabase
+      // Try manual creation
+      const { data: newProfile, error: createError } = await supabase
         .rpc('create_user_profile_manual', {
           p_user_id: authUser.id,
           p_user_email: authUser.email || '',
           p_user_token: token || null
         });
 
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => {
-          reject(new Error('Manual creation timeout after 3 seconds'));
-        }, 3000);
-      });
-
-      const result = await Promise.race([manualCreationPromise, timeoutPromise]);
-      const { data: newProfile, error: createError } = result as any;
-
-      authDebug('📥 Manual creation response', {
-        hasData: !!newProfile,
-        hasError: !!createError,
-        errorCode: createError?.code,
-        errorMessage: createError?.message,
-        profileData: newProfile
-      });
-
       if (createError) {
-        authError('Error creating profile manually', createError);
-        authDebug('🆘 Manual creation failed, using fallback...');
+        console.error('Error creating profile manually', createError);
         createFallbackUser(authUser);
         return;
       }
 
       if (newProfile) {
-        authDebug('✅ Profile created manually', newProfile);
         setUserProfile(newProfile);
         setUser({
           id: newProfile.id,
@@ -343,30 +200,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           isSpecialized: newProfile.role === 'specialized',
           isRegular: newProfile.role === 'regular'
         });
-        
-        authDebug('✅ User state updated after manual creation');
       } else {
-        authError('Manual creation returned no data');
+        console.error('Manual creation returned no data');
         createFallbackUser(authUser);
       }
-
-    } catch (error: any) {
-      authError('Exception creating user profile manually', error);
-      authDebug('🆘 Manual creation exception, using fallback...');
+    } catch (error) {
+      console.error('Exception creating user profile manually', error);
       createFallbackUser(authUser);
     }
   };
 
   const createFallbackUser = (authUser: SupabaseUser) => {
-    authDebug('🆘 Creating fallback user', { 
-      email: authUser.email,
-      userId: authUser.id 
-    });
-    
     let role: 'admin' | 'regular' | 'specialized' = 'regular';
     if (['rishabh.biry@gmail.com', 'biryrishabh01@gmail.com', 'biryrishabh@gmail.com'].includes(authUser.email || '')) {
       role = 'admin';
-      authDebug('👑 Admin role assigned to fallback user');
     }
 
     const newUser = {
@@ -379,95 +226,62 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     };
 
     setUser(newUser);
-    authDebug('✅ Fallback user created successfully', newUser);
   };
 
   const validateToken = async (token: string): Promise<boolean> => {
     try {
-      authDebug('🎫 Starting token validation', { 
-        token, 
-        length: token.length 
-      });
-      
-      // Quick validation with timeout
-      const validationPromise = supabase
+      const { data, error } = await supabase
         .from('user_tokens')
         .select('*')
         .eq('token', token)
         .eq('is_active', true);
 
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => {
-          reject(new Error('Token validation timeout after 2 seconds'));
-        }, 2000);
-      });
-
-      const result = await Promise.race([validationPromise, timeoutPromise]);
-      const { data, error } = result as any;
-
       if (error) {
-        authError('Error in token validation query', error);
+        console.error('Error in token validation query', error);
         return false;
       }
 
-      const isValid = data && data.length > 0;
-      authDebug('🎫 Token validation result', { 
-        isValid, 
-        foundTokens: data?.length || 0 
-      });
-      
-      return isValid;
+      return data && data.length > 0;
     } catch (error) {
-      authError('Exception in validateToken', error);
+      console.error('Exception in validateToken', error);
       return false;
     }
   };
 
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
-      authDebug('🔐 Starting login process', { email });
-      
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
       if (error) {
-        authError('Login failed', error);
+        console.error('Login failed', error);
         return false;
       }
 
       if (data.user) {
-        authDebug('✅ Login successful', { userEmail: data.user.email });
         return true;
       }
 
-      authError('Login returned no user');
+      console.error('Login returned no user');
       return false;
     } catch (error) {
-      authError('Exception during login', error);
+      console.error('Exception during login', error);
       return false;
     }
   };
 
   const register = async (email: string, password: string, token?: string): Promise<boolean> => {
     try {
-      authDebug('📝 Starting registration process', { 
-        email, 
-        hasToken: !!token,
-        token: token || 'none'
-      });
-      
       // Validate token if provided
       if (token) {
-        authDebug('🎫 Validating token before registration...');
         const isValidToken = await validateToken(token);
         
         if (!isValidToken) {
-          authError('Invalid token provided during registration', { token });
+          console.error('Invalid token provided during registration', { token });
           return false;
         }
-        authDebug('✅ Token validation passed');
       }
 
       const signUpData: any = {
@@ -478,63 +292,39 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           data: token ? { token } : {}
         }
       };
-
-      authDebug('📤 Sending signup request to Supabase', {
-        email: signUpData.email,
-        hasPassword: !!signUpData.password,
-        metadata: signUpData.options.data
-      });
       
       const { data, error } = await supabase.auth.signUp(signUpData);
 
-      authDebug('📥 Supabase signup response received', {
-        hasData: !!data,
-        hasUser: !!data?.user,
-        hasSession: !!data?.session,
-        hasError: !!error,
-        userEmail: data?.user?.email
-      });
-
       if (error) {
-        authError('Registration failed', error);
+        console.error('Registration failed', error);
         return false;
       }
 
       if (data.user) {
-        authDebug('✅ Registration successful', { 
-          userEmail: data.user.email,
-          userId: data.user.id,
-          emailConfirmed: !!data.user.email_confirmed_at
-        });
-        
         return true;
       }
 
-      authError('Registration returned no user');
+      console.error('Registration returned no user');
       return false;
     } catch (error) {
-      authError('Exception during registration', error);
+      console.error('Exception during registration', error);
       return false;
     }
   };
 
   const logout = async (): Promise<void> => {
     try {
-      authDebug('👋 Starting logout process...');
-      
       setUser(null);
       setUserProfile(null);
       
       const { error } = await supabase.auth.signOut();
       
       if (error) {
-        authError('Logout error', error);
+        console.error('Logout error', error);
         throw error;
       }
-      
-      authDebug('✅ Logout successful');
     } catch (error) {
-      authError('Exception during logout', error);
+      console.error('Exception during logout', error);
       setUser(null);
       setUserProfile(null);
       throw error;

@@ -22,7 +22,6 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   // Add a local timeout to prevent infinite loading
   useEffect(() => {
     const timeout = setTimeout(() => {
-      console.log('🚨 ProtectedRoute loading timeout, forcing render');
       setLocalLoading(false);
     }, 2000); // Reduced to 2 seconds for better UX
 
